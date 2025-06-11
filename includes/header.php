@@ -72,7 +72,7 @@ if (!isset($pageTitle)) {
                         <li class="nav-item">
                             <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'categories.php' ? 'active' : ''; ?>"
                                 href="<?php echo SITE_URL; ?>/categories.php">
-                                <i class="bi bi-grid-3x3-gap me-1"></i>Categories
+                                <i class="bi bi-grid me-1"></i>Categories
                             </a>
                         </li>
 
