@@ -88,32 +88,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
     }
-
-    // Back to top button
-    const backToTopBtn = document.getElementById('backToTopBtn');
-    if (backToTopBtn) {
-      window.addEventListener('scroll', function () {
-        if (window.pageYOffset > 300) {
-          backToTopBtn.style.display = 'flex';
-          backToTopBtn.style.opacity = '1';
-        } else {
-          backToTopBtn.style.opacity = '0';
-          setTimeout(() => {
-            if (backToTopBtn.style.opacity === '0') {
-              backToTopBtn.style.display = 'none';
-            }
-          }, 300);
-        }
-      });
-
-      backToTopBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        window.scrollTo({
-          top: 0,
-          behavior: 'smooth'
-        });
-      });
-    }
   }
 
   // Enhanced search functionality with modern UX

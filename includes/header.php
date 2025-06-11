@@ -41,17 +41,16 @@ if (!isset($pageTitle)) {
     <link rel="icon" href="<?php echo SITE_URL; ?>/assets/images/logo.png" type="image/png">
 </head>
 
-<body>
-    <!-- Header -->
+<body> <!-- Header -->
     <header class="site-header sticky-top">
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-2">
             <div class="container">
                 <!-- Brand Logo -->
                 <a class="navbar-brand d-flex align-items-center" href="<?php echo SITE_URL; ?>/index.php">
-                    <img src="<?php echo SITE_URL; ?>/assets/images/logo.png" alt="DUET Library" width="45" height="45" class="me-3">
+                    <img src="<?php echo SITE_URL; ?>/assets/images/logo.png" alt="DUET Library" width="28" height="28" class="me-2">
                     <div class="brand-text">
-                        <span class="brand-primary fw-bold">DUET</span>
-                        <span class="brand-secondary fw-semibold">Library</span>
+                        <span class="brand-primary fw-semibold">DUET</span>
+                        <span class="brand-secondary fw-medium">Library</span>
                     </div>
                 </a>
 
@@ -84,11 +83,10 @@ if (!isset($pageTitle)) {
                                     <i class="bi bi-upload me-1"></i>Upload
                                 </a>
                             </li>
-                            <?php if (!$auth->isAdmin()): ?>
-                                <li class="nav-item">
+                            <?php if (!$auth->isAdmin()): ?> <li class="nav-item">
                                     <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'request.php' ? 'active' : ''; ?>"
                                         href="<?php echo SITE_URL; ?>/request.php">
-                                        <i class="bi bi-file-earmark-plus me-1"></i>Request Book
+                                        <i class="bi bi-file-earmark-plus me-1"></i>Request
                                     </a>
                                 </li>
                             <?php endif; ?>
@@ -108,16 +106,16 @@ if (!isset($pageTitle)) {
                                         <hr class="dropdown-divider">
                                     </li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/books.php">
-                                            <i class="bi bi-book me-2"></i>Manage Books
+                                            <i class="bi bi-book me-2"></i>Books
                                         </a></li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/categories.php">
-                                            <i class="bi bi-folder me-2"></i>Manage Categories
+                                            <i class="bi bi-folder me-2"></i>Categories
                                         </a></li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/requests.php">
-                                            <i class="bi bi-inbox me-2"></i>Book Requests
+                                            <i class="bi bi-inbox me-2"></i>Requests
                                         </a></li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/users.php">
-                                            <i class="bi bi-people me-2"></i>Manage Users
+                                            <i class="bi bi-people me-2"></i>Users
                                         </a></li>
                                 </ul>
                             </li>
@@ -129,7 +127,7 @@ if (!isset($pageTitle)) {
                         <?php if ($auth->isLoggedIn()): ?>
                             <!-- User Dropdown -->
                             <div class="dropdown">
-                                <button class="btn btn-outline-primary dropdown-toggle d-flex align-items-center"
+                                <button class="btn btn-outline-primary btn-sm dropdown-toggle d-flex align-items-center"
                                     type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-person-circle me-1"></i>
                                     <span class="d-none d-md-inline"><?php echo htmlspecialchars($auth->getUser()['display_name']); ?></span>
@@ -155,7 +153,7 @@ if (!isset($pageTitle)) {
                         <?php else: ?>
                             <!-- Auth Buttons -->
                             <div class="d-flex gap-2">
-                                <a href="<?php echo SITE_URL; ?>/auth/login.php" class="btn btn-outline-primary">
+                                <a href="<?php echo SITE_URL; ?>/auth/login.php" class="btn btn-outline-primary btn-sm">
                                     <i class="bi bi-box-arrow-in-right me-1"></i>Login
                                 </a>
                             </div>
@@ -176,7 +174,5 @@ if (!isset($pageTitle)) {
             </div>
         </div>
         <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); ?>
-    <?php endif; ?>
-
-    <!-- Main Content Container -->
-    <main id="main-content"
+    <?php endif; ?> <!-- Main Content Container -->
+    <main id="main-content">

@@ -95,13 +95,13 @@ include 'includes/header.php';
 <?php endif; ?>
 
 <!-- Search & Filter Section -->
-<section class="search-filter-section bg-white py-3 shadow-sm sticky-top border-bottom">
+<section class="search-filter-section bg-white py-2 shadow-sm sticky-top border-bottom">
     <div class="container">
-        <div class="row g-3 align-items-center">
+        <div class="row g-2 align-items-center">
             <!-- Search Form -->
             <div class="col-lg-5 col-md-7 col-12">
                 <form action="<?php echo SITE_URL; ?>/index.php" method="get" class="search-form">
-                    <div class="input-group">
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0">
                             <i class="bi bi-search text-muted"></i>
                         </span>
@@ -114,7 +114,7 @@ include 'includes/header.php';
                         <?php if ($categoryId > 0): ?>
                             <input type="hidden" name="category" value="<?php echo $categoryId; ?>">
                         <?php endif; ?>
-                        <button class="btn btn-primary px-3" type="submit">
+                        <button class="btn btn-primary px-2" type="submit">
                             <i class="bi bi-search me-1"></i>
                             <span class="d-none d-sm-inline">Search</span>
                         </button>
@@ -125,7 +125,7 @@ include 'includes/header.php';
             <!-- Category Filter -->
             <div class="col-lg-3 col-md-5 col-12">
                 <form action="<?php echo SITE_URL; ?>/index.php" method="get" class="category-filter">
-                    <select name="category" class="form-select shadow-none" onchange="this.form.submit()">
+                    <select name="category" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
                         <option value="">All Categories</option>
                         <?php foreach ($categories as $category): ?>
                             <option value="<?php echo $category['category_id']; ?>"
