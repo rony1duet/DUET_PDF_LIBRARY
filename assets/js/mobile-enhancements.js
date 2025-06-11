@@ -65,38 +65,125 @@ function initializeMobileEnhancements() {
         // Improve touch interactions for book cards
         const bookCards = document.querySelectorAll('.book-card');
         bookCards.forEach(card => {
-            card.addEventListener('touchstart', function () {
+            let touchStartTime;
+
+            card.addEventListener('touchstart', function (e) {
+                touchStartTime = Date.now();
                 this.classList.add('touch-active');
+
+                // Add haptic feedback if supported
+                if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                }
             });
 
-            card.addEventListener('touchend', function () {
+            card.addEventListener('touchend', function (e) {
+                const touchDuration = Date.now() - touchStartTime;
+
                 setTimeout(() => {
                     this.classList.remove('touch-active');
-                }, 200);
+                }, 150);
+
+                // Handle quick taps (< 300ms) as clicks
+                if (touchDuration < 300) {
+                    const link = this.querySelector('.book-cover-link');
+                    if (link && !e.target.closest('.badge')) {
+                        // Prevent default touch handling
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        // Navigate to book page
+                        setTimeout(() => {
+                            window.location.href = link.href;
+                        }, 100);
+                    }
+                }
             });
+
+            card.addEventListener('touchcancel', function () {
+                this.classList.remove('touch-active');
+            });
+
+            // Handle category badge clicks separately
+            const categoryBadge = card.querySelector('.badge.bg-gradient');
+            if (categoryBadge) {
+                categoryBadge.addEventListener('touchend', function (e) {
+                    e.stopPropagation();
+                    // Handle category filter if needed
+                });
+            }
         });
 
-        // Add touch-specific CSS
+        // Add touch-specific CSS with better mobile optimizations
         const touchStyles = `
-      .touch-device .book-card.touch-active {
-        transform: scale(0.98);
-        transition: transform 0.1s ease;
-      }
-      
-      @media (hover: none) {
-        .book-card:hover {
-          transform: none !important;
-          box-shadow: var(--shadow-sm) !important;
-        }
-        .book-overlay {
-          opacity: 0 !important;
-        }
-        .book-actions {
-          opacity: 1 !important;
-          position: static !important;
-        }
-      }
-    `;
+            .touch-device .book-card.touch-active {
+                transform: scale(0.97);
+                transition: transform 0.1s ease;
+            }
+            
+            .touch-device .book-card:hover {
+                transform: none !important;
+                box-shadow: var(--shadow-sm) !important;
+            }
+            
+            .touch-device .book-card:hover .book-image {
+                transform: none !important;
+                filter: none !important;
+            }
+            
+            .touch-device .book-card:hover::before {
+                opacity: 0 !important;
+            }
+            
+            .touch-device .book-card:hover .book-cover-link::before {
+                opacity: 0 !important;
+            }
+            
+            .touch-device .badge.bg-gradient:hover {
+                transform: none !important;
+            }
+            
+            @media (hover: none) {
+                .book-card:hover {
+                    transform: none !important;
+                    box-shadow: var(--shadow-sm) !important;
+                }
+                .book-overlay {
+                    opacity: 0 !important;
+                }
+                .book-actions {
+                    opacity: 1 !important;
+                    position: static !important;
+                }
+                
+                /* Improve touch targets */
+                .book-card {
+                    margin-bottom: 1.5rem;
+                }
+                
+                .badge.bg-gradient {
+                    min-height: 36px;
+                    padding: 0.5rem 1rem;
+                }
+            }
+            
+            /* Better mobile grid spacing */
+            @media (max-width: 768px) {
+                .books-grid {
+                    padding: 0 1rem;
+                }
+            }
+            
+            @media (max-width: 576px) {
+                .books-grid {
+                    padding: 0 0.5rem;
+                }
+                
+                .book-card {
+                    border-radius: 1rem;
+                }
+            }
+        `;
 
         const style = document.createElement('style');
         style.textContent = touchStyles;
@@ -114,6 +201,14 @@ function initializeMobileEnhancements() {
             stickyElements.forEach(el => {
                 el.style.top = '0';
             });
+
+            // Reset book card animations
+            const bookCards = document.querySelectorAll('.book-card');
+            bookCards.forEach(card => {
+                card.style.animation = 'none';
+                card.offsetHeight; // Trigger reflow
+                card.style.animation = null;
+            });
         }, 100);
     });
 
@@ -122,6 +217,14 @@ function initializeMobileEnhancements() {
     if (viewport && window.innerWidth <= 768) {
         viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
+
+    // Add passive event listeners for better performance
+    const bookCards = document.querySelectorAll('.book-card');
+    bookCards.forEach(card => {
+        card.addEventListener('scroll', function () {
+            // Handle scroll optimizations
+        }, { passive: true });
+    });
 }
 
 // Enhanced search functionality

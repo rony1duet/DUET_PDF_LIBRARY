@@ -249,13 +249,11 @@ include 'includes/header.php';
                                         </div>
                                     </div>
                                 <?php endif; ?>
-                            </a>
-
-                            <!-- Category Badge -->
+                            </a> <!-- Category Badge -->
                             <?php if (!empty($book['category_name'])): ?>
                                 <div class="position-absolute top-0 end-0 m-2">
-                                    <span class="badge bg-gradient text-white shadow-sm px-4 py-2 fs-6" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%); min-width: 120px; border-radius: 25px;">
-                                        <i class="bi bi-tag-fill me-2"></i><?php echo htmlspecialchars($book['category_name']); ?>
+                                    <span class="badge bg-gradient text-white shadow-sm px-3 py-2">
+                                        <i class="bi bi-tag-fill me-1"></i><?php echo htmlspecialchars($book['category_name']); ?>
                                     </span>
                                 </div>
                             <?php endif; ?>
