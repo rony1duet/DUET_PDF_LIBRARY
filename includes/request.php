@@ -74,18 +74,18 @@ class BookRequest
         // Add ordering
         $sql .= " ORDER BY r.created_at DESC";
 
-        // Add pagination
-        $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
-        $params['offset'] = $offset;
-        $params['limit'] = $perPage;
-
-        // Get total count for pagination
+        // Get total count for pagination (before adding LIMIT parameters)
         $countSql = "SELECT COUNT(*) FROM book_requests r";
         if (!empty($whereClauses)) {
             $countSql .= " WHERE " . implode(' AND ', $whereClauses);
         }
         $totalCount = $this->db->getValue($countSql, $params);
+
+        // Add pagination
+        $offset = ($page - 1) * $perPage;
+        $sql .= " LIMIT :offset, :limit";
+        $params['offset'] = $offset;
+        $params['limit'] = $perPage;
 
         // Get requests
         $requests = $this->db->getRows($sql, $params);

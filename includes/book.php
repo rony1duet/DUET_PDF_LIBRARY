@@ -27,10 +27,24 @@ class Book
      */
     public function getBooks($filters = [], $page = 1, $perPage = 10)
     {
-        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name 
+        // Handle new parameter structure
+        if (isset($filters['page'])) {
+            $page = $filters['page'];
+        }
+        if (isset($filters['per_page'])) {
+            $perPage = $filters['per_page'];
+        }
+
+        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name,
+                       COALESCE(dc.download_count, 0) as download_count
                FROM books b 
                LEFT JOIN categories c ON b.category_id = c.category_id 
-               LEFT JOIN users u ON b.uploaded_by = u.user_id";
+               LEFT JOIN users u ON b.uploaded_by = u.user_id
+               LEFT JOIN (
+                   SELECT book_id, COUNT(*) as download_count 
+                   FROM downloads 
+                   GROUP BY book_id
+               ) dc ON b.book_id = dc.book_id";
 
         $params = [];
         $whereClauses = [];
@@ -62,8 +76,8 @@ class Book
             }
         }
 
-        // For non-admin users, only show approved books
-        if (!$this->auth->isAdmin()) {
+        // For non-admin users, only show approved books (unless admin_view is set)
+        if (!$this->auth->isAdmin() && !isset($filters['admin_view'])) {
             $whereClauses[] = "b.status = 'approved'";
         }
 
@@ -73,7 +87,30 @@ class Book
         }
 
         // Add ordering
-        $sql .= " ORDER BY b.created_at DESC";
+        $sortBy = $filters['sort'] ?? 'newest';
+        switch ($sortBy) {
+            case 'oldest':
+                $sql .= " ORDER BY b.created_at ASC";
+                break;
+            case 'title_asc':
+                $sql .= " ORDER BY b.title ASC";
+                break;
+            case 'title_desc':
+                $sql .= " ORDER BY b.title DESC";
+                break;
+            case 'author_asc':
+                $sql .= " ORDER BY b.author ASC";
+                break;
+            case 'author_desc':
+                $sql .= " ORDER BY b.author DESC";
+                break;
+            case 'downloads':
+                $sql .= " ORDER BY b.download_count DESC";
+                break;
+            default: // newest
+                $sql .= " ORDER BY b.created_at DESC";
+                break;
+        }
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
@@ -110,10 +147,16 @@ class Book
      */
     public function getBook($bookId)
     {
-        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name 
+        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name,
+                       COALESCE(dc.download_count, 0) as download_count
                FROM books b 
                LEFT JOIN categories c ON b.category_id = c.category_id 
                LEFT JOIN users u ON b.uploaded_by = u.user_id 
+               LEFT JOIN (
+                   SELECT book_id, COUNT(*) as download_count 
+                   FROM downloads 
+                   GROUP BY book_id
+               ) dc ON b.book_id = dc.book_id
                WHERE b.book_id = :book_id";
 
         // For non-admin users, only show approved books

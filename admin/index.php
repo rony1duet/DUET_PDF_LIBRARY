@@ -1,4 +1,5 @@
 <?php
+
 /**
  * DUET PDF Library - Admin Dashboard
  * Main admin control panel
@@ -29,7 +30,8 @@ $pendingRequests = $requestObj->getPendingRequestCount();
 $totalDownloads = $db->fetchColumn("SELECT COUNT(*) FROM downloads");
 
 // Get recent activities
-$recentBooks = $bookObj->getBooks(1, 5); // Page 1, 5 items per page
+$recentBooksData = $bookObj->getBooks(['page' => 1, 'per_page' => 5]); // Page 1, 5 items per page
+$recentBooks = $recentBooksData['books'] ?? [];
 $recentRequests = $requestObj->getRequests(1, 5); // Page 1, 5 items per page
 
 // Page title
@@ -84,7 +86,7 @@ include '../includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-3 mb-3">
             <div class="card admin-dashboard-card users h-100">
                 <div class="card-body">
@@ -103,7 +105,7 @@ include '../includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-3 mb-3">
             <div class="card admin-dashboard-card requests h-100">
                 <div class="card-body">
@@ -122,7 +124,7 @@ include '../includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-3 mb-3">
             <div class="card admin-dashboard-card downloads h-100">
                 <div class="card-body">
@@ -174,11 +176,11 @@ include '../includes/header.php';
                                     <?php foreach ($recentBooks as $book): ?>
                                         <tr>
                                             <td>
-                                                <a href="../book.php?id=<?php echo $book['id']; ?>" class="text-decoration-none">
-                                                    <?php echo htmlspecialchars($book['title']); ?>
+                                                <a href="../book.php?id=<?php echo $book['book_id']; ?>" class="text-decoration-none">
+                                                    <?php echo htmlspecialchars($book['title'] ?? ''); ?>
                                                 </a>
                                             </td>
-                                            <td><?php echo htmlspecialchars($book['author']); ?></td>
+                                            <td><?php echo htmlspecialchars($book['author'] ?? ''); ?></td>
                                             <td>
                                                 <?php if ($book['status'] === 'approved'): ?>
                                                     <span class="badge bg-success">Approved</span>
@@ -188,12 +190,12 @@ include '../includes/header.php';
                                                     <span class="badge bg-danger">Rejected</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <td><?php echo date('M j, Y', strtotime($book['created_at'])); ?></td>
+                                            <td><?php echo date('M j, Y', strtotime($book['created_at'] ?? 'now')); ?></td>
                                             <td>
-                                                <a href="edit-book.php?id=<?php echo $book['id']; ?>" class="btn btn-sm btn-outline-secondary">
+                                                <a href="edit-book.php?id=<?php echo $book['book_id']; ?>" class="btn btn-sm btn-outline-secondary">
                                                     <i class="bi bi-pencil-square"></i>
                                                 </a>
-                                                <a href="delete-book.php?id=<?php echo $book['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this book?');">
+                                                <a href="delete-book.php?id=<?php echo $book['book_id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this book?');">
                                                     <i class="bi bi-trash"></i>
                                                 </a>
                                             </td>
@@ -206,7 +208,7 @@ include '../includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <!-- Recent Requests -->
         <div class="col-md-6 mb-4">
             <div class="card shadow-sm h-100">
