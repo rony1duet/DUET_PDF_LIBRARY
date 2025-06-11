@@ -115,20 +115,17 @@ function initializeMobileEnhancements() {
         });
 
         // Add touch-specific CSS with better mobile optimizations
-        const touchStyles = `
-            .touch-device .book-card.touch-active {
-                transform: scale(0.97);
-                transition: transform 0.1s ease;
+        const touchStyles = `            .touch-device .book-card.touch-active {
+                opacity: 0.9;
+                transition: opacity 0.1s ease;
             }
             
             .touch-device .book-card:hover {
-                transform: none !important;
                 box-shadow: var(--shadow-sm) !important;
             }
             
             .touch-device .book-card:hover .book-image {
-                transform: none !important;
-                filter: none !important;
+                opacity: 0.9 !important;
             }
             
             .touch-device .book-card:hover::before {
@@ -140,12 +137,10 @@ function initializeMobileEnhancements() {
             }
             
             .touch-device .badge.bg-gradient:hover {
-                transform: none !important;
+                background: var(--primary-hover) !important;
             }
-            
-            @media (hover: none) {
+              @media (hover: none) {
                 .book-card:hover {
-                    transform: none !important;
                     box-shadow: var(--shadow-sm) !important;
                 }
                 .book-overlay {

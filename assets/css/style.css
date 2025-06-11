@@ -615,7 +615,7 @@ body {
     letter-spacing: 0.5px;
     text-transform: uppercase;
     border-radius: var(--radius-pill);
-    box-shadow: 0 4px 12px rgba(0, 159, 81, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 159, 81, 0.2);
     transition: var(--transition-smooth);
     white-space: nowrap;
     overflow: hidden;
@@ -1119,7 +1119,7 @@ html {
 
 /* ===== TOUCH DEVICE OPTIMIZATIONS ===== */
 .touch-device .book-card {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
 }
 
 .touch-device .book-card.touch-active {
@@ -1127,13 +1127,11 @@ html {
 }
 
 .touch-device .book-card:hover {
-    transform: none;
     box-shadow: var(--shadow-sm);
 }
 
 .touch-device .book-card:hover .book-image {
-    transform: none;
-    filter: none;
+    opacity: 0.9;
 }
 
 .touch-device .btn {
@@ -1149,25 +1147,11 @@ html {
 /* Better spacing for touch */
 @media (hover: none) and (pointer: coarse) {
     .book-card:hover {
-        transform: none !important;
         box-shadow: var(--shadow-sm) !important;
     }
     
     .book-card:hover .book-image {
-        transform: none !important;
-        filter: none !important;
-    }
-    
-    .book-card:hover .badge.bg-gradient {
-        transform: none !important;
-    }
-    
-    .book-card:hover::before {
-        opacity: 0 !important;
-    }
-    
-    .book-card:hover .book-cover-link::before {
-        opacity: 0 !important;
+        opacity: 0.9 !important;
     }
     
     .pagination .page-link {
