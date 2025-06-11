@@ -1,4 +1,6 @@
-    </main> <!-- Footer -->
+    </main>
+
+    <!-- Footer -->
     <footer class="site-footer bg-white border-top shadow-sm mt-auto">
         <div class="container">
             <div class="row align-items-center py-2">

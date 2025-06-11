@@ -41,7 +41,8 @@ if (!isset($pageTitle)) {
     <link rel="icon" href="<?php echo SITE_URL; ?>/assets/images/logo.png" type="image/png">
 </head>
 
-<body> <!-- Header -->
+<body class="d-flex flex-column min-vh-100">
+    <!-- Header -->
     <header class="site-header sticky-top">
         <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-2">
             <div class="container">

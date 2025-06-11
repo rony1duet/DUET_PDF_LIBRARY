@@ -27,13 +27,14 @@ class Category
      */
     public function getCategories($includeEmpty = false)
     {
-        $sql = "SELECT c.*, u.display_name as creator_name 
+        $sql = "SELECT c.*, u.display_name as creator_name,
+                       (SELECT COUNT(*) FROM books b WHERE b.category_id = c.category_id AND b.status = 'approved') as book_count
                FROM categories c 
                LEFT JOIN users u ON c.created_by = u.user_id";
 
         // Optionally exclude empty categories
         if (!$includeEmpty) {
-            $sql .= " WHERE c.usage_count > 0";
+            $sql .= " HAVING book_count > 0";
         }
 
         $sql .= " ORDER BY c.name ASC";
@@ -57,7 +58,7 @@ class Category
     /**
      * Add a new category
      */
-    public function addCategory($name, $slug = null)
+    public function addCategory($name, $slug = null, $description = null)
     {
         // Check if user is admin
         if (!$this->auth->isAdmin()) {
@@ -84,14 +85,26 @@ class Category
             throw new Exception("A category with this name or slug already exists");
         }
 
-        // Insert category
-        $categoryId = $this->db->insert('categories', [
+        // Prepare data for insertion
+        $data = [
             'name' => $name,
             'slug' => $slug,
             'created_by' => $this->auth->getUserId(),
             'usage_count' => 0,
             'created_at' => date('Y-m-d H:i:s')
-        ]);
+        ];
+
+        // Add description if provided and column exists
+        if (!empty($description)) {
+            // Check if description column exists
+            $columns = $this->db->getRows("SHOW COLUMNS FROM categories LIKE 'description'");
+            if (!empty($columns)) {
+                $data['description'] = $description;
+            }
+        }
+
+        // Insert category
+        $categoryId = $this->db->insert('categories', $data);
 
         return $categoryId;
     }

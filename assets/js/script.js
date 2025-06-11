@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initializeImageLoading();
   initializeMobileEnhancements();
   initializeUploadProgress();
+  initializeCategoryPage(); // Re-added category functionality
 
   // Auto-dismiss flash messages with enhanced animations
   function initializeFlashMessages() {
@@ -176,24 +177,7 @@ document.addEventListener("DOMContentLoaded", function () {
       counters.forEach(counter => {
         counterObserver.observe(counter);
       });
-    }
-
-    // Card hover animations
-    const bookCards = document.querySelectorAll('.book-card');
-    bookCards.forEach(card => {
-      card.addEventListener('mouseenter', function () {
-        if (!document.body.classList.contains('touch-device')) {
-          this.style.transform = 'translateY(-8px)';
-          this.style.transition = 'all 0.3s ease';
-        }
-      });
-
-      card.addEventListener('mouseleave', function () {
-        if (!document.body.classList.contains('touch-device')) {
-          this.style.transform = 'translateY(0)';
-        }
-      });
-    });
+    }    // Card hover animations - removed transform animations for book cards
 
     // Floating shapes animation
     const shapes = document.querySelectorAll('.shape, .floating-shape');
@@ -650,6 +634,127 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 200 + Math.random() * 300);
   }
 
+  // Initialize category page functionality
+  function initializeCategoryPage() {
+    // Only run on categories page
+    if (!document.querySelector('.category-card')) return;
+
+    initializeCategoryCards();
+    initializeCategoryDeleteButtons();
+  }
+
+  // Enhanced category card interactions
+  function initializeCategoryCards() {
+    const categoryCards = document.querySelectorAll('.category-card');
+
+    categoryCards.forEach(card => {
+      // Handle card click for navigation with proper event handling
+      card.addEventListener('click', function (e) {
+        // Don't navigate if clicking on admin controls or buttons
+        if (e.target.closest('.category-actions') || e.target.closest('button') || e.target.closest('a.btn-action')) {
+          return;
+        }
+
+        const categoryLink = card.querySelector('.category-link');
+        if (categoryLink) {
+          window.location.href = categoryLink.href;
+        }
+      });
+
+      // Add keyboard navigation
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const categoryLink = card.querySelector('.category-link');
+          if (categoryLink) {
+            window.location.href = categoryLink.href;
+          }
+        }
+      });
+
+      // Make card focusable and accessible
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('role', 'button');
+
+      const categoryLink = card.querySelector('.category-link');
+      if (categoryLink) {
+        card.setAttribute('aria-label', `View ${categoryLink.textContent.trim()} category`);
+      }
+    });
+  }
+
+  // Enhanced delete functionality
+  function initializeCategoryDeleteButtons() {
+    const deleteButtons = document.querySelectorAll('.btn-delete[data-category-id]');
+
+    deleteButtons.forEach(button => {
+      button.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCategoryDelete(this);
+      });
+    });
+  }
+
+  // Enhanced notification system
+  function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existing = document.querySelectorAll('.notification-toast');
+    existing.forEach(n => n.remove());
+
+    const notification = document.createElement('div');
+    notification.className = `notification-toast notification-${type}`;
+    notification.innerHTML = `
+      <div class="notification-content">
+        <i class="bi bi-${type === 'error' ? 'exclamation-circle' : 'check-circle'}"></i>
+        <span>${message}</span>
+      </div>
+    `;
+
+    // Style the notification
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${type === 'error' ? '#fee2e2' : '#d1fae5'};
+      color: ${type === 'error' ? '#dc2626' : '#065f46'};
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      border-left: 4px solid ${type === 'error' ? '#dc2626' : '#10b981'};
+      animation: slideInRight 0.3s ease;
+    `;
+
+    // Add animation
+    if (!document.querySelector('#notificationAnimations')) {
+      const style = document.createElement('style');
+      style.id = 'notificationAnimations';
+      style.textContent = `
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(100%); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .notification-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    document.body.appendChild(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.style.animation = 'slideInRight 0.3s ease reverse';
+        setTimeout(() => notification.remove(), 300);
+      }
+    }, 5000);
+  }
+
   // Utility functions
   function validatePdfFile(input) {
     const file = input.files[0];
@@ -791,9 +896,42 @@ document.addEventListener("DOMContentLoaded", function () {
       // Service worker not available, silently fail
     });
   }
-
   console.log('DUET PDF Library initialized successfully');
 });
+
+// Global category delete function (accessible from inline onclick handlers)
+function handleCategoryDelete(button) {
+  const categoryName = button.getAttribute('data-category-name');
+  const categoryId = button.getAttribute('data-category-id');
+
+  if (!categoryName || !categoryId) {
+    alert('Error: Category information not found');
+    return;
+  }
+
+  // Enhanced confirmation dialog
+  const confirmMessage = `Are you sure you want to delete the category "${categoryName}"?\n\nThis action cannot be undone. Books in this category will remain but become uncategorized.`;
+
+  if (confirm(confirmMessage)) {
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'admin/delete-category.php';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'category_id';
+    input.value = categoryId;
+
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+}
 
 // Global utility functions
 window.duetLibrary = {
