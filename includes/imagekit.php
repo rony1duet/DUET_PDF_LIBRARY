@@ -49,8 +49,8 @@ class ImageKitHelper
             'file' => $file,
             'fileName' => $fileName,
             'folder' => $folder,
-            'useUniqueFileName' => true,  // Allow ImageKit to generate unique names
-            'isPrivateFile' => false,
+            'useUniqueFileName' => 'true',  // Allow ImageKit to generate unique names (must be string)
+            'isPrivateFile' => 'false',     // Must be string, not boolean
         ];
 
         // Add tags based on file type

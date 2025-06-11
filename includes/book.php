@@ -810,8 +810,9 @@ class Book
             // Upload file to single 'uploads' folder (all files together)
             $result = $imageKit->uploadFile($filePath, $filename, 'uploads', $mimeType);
 
-            // Store both the path and file ID in the database
-            // Format: path|fileId
+            // Store the actual ImageKit path and file ID in the database
+            // Use the actual filePath returned by ImageKit (which includes unique suffix)
+            // Format: actualPath|fileId
             return $result['path'] . '|' . $result['fileId'];
         } catch (Exception $e) {
             // Log error and throw exception (no local storage fallback)
@@ -900,18 +901,33 @@ class Book
             require_once __DIR__ . '/imagekit.php';
 
             try {
-                // Extract the file ID from the stored value
+                // Extract the stored path and file ID
                 $parts = explode('|', $coverPath);
+                $storedPath = $parts[0] ?? null;
                 $fileId = $parts[1] ?? null;
 
                 if (!$fileId) {
+                    error_log('ImageKit: No fileId found in cover path: ' . $coverPath);
                     return null;
                 }
 
                 // Create ImageKit helper
                 $imageKit = new ImageKitHelper();
 
-                // Get file details to retrieve the actual filename/path
+                // First try to use the stored path directly
+                if ($storedPath) {
+                    try {
+                        $url = $imageKit->getOptimizedImageUrl($storedPath, $width, $height, 85, 'auto');
+                        error_log('ImageKit: Successfully generated URL from stored path: ' . $url);
+                        return $url;
+                    } catch (Exception $e) {
+                        error_log('ImageKit stored path failed for path: ' . $storedPath . ' - ' . $e->getMessage());
+                        // Continue to fallback method
+                    }
+                }
+
+                // Fallback: Get file details to retrieve the actual filename/path
+                error_log('ImageKit: Trying fallback method with fileId: ' . $fileId);
                 $fileDetails = $imageKit->getFileDetails($fileId);
 
                 if (!$fileDetails || !isset($fileDetails['filePath'])) {
@@ -921,9 +937,12 @@ class Book
 
                 // Use the actual ImageKit file path for URL generation
                 $actualPath = $fileDetails['filePath'];
+                error_log('ImageKit: Retrieved actual path from API: ' . $actualPath);
 
                 // Get optimized image URL using actual path
-                return $imageKit->getOptimizedImageUrl($actualPath, $width, $height, 85, 'auto');
+                $url = $imageKit->getOptimizedImageUrl($actualPath, $width, $height, 85, 'auto');
+                error_log('ImageKit: Successfully generated URL from actual path: ' . $url);
+                return $url;
             } catch (Exception $e) {
                 // Log error and return null (no local fallback)
                 error_log('ImageKit cover URL generation error: ' . $e->getMessage());
