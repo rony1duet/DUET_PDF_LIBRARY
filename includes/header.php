@@ -77,7 +77,7 @@ if (!isset($pageTitle)) {
                             </a>
                         </li>
 
-                        <?php if ($auth->isLoggedIn()): ?>
+                        <?php if ($auth->isLoggedIn() && !$auth->isAdmin()): ?>
                             <li class="nav-item">
                                 <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'upload.php' ? 'active' : ''; ?>"
                                     href="<?php echo SITE_URL; ?>/upload.php">
