@@ -286,26 +286,6 @@ class Auth
     }
 
     /**
-     * Get current user (alias for getUser)
-     */
-    public function getCurrentUser()
-    {
-        $user = $this->getUser();
-        if ($user) {
-            // Return consistent structure with getUsers() method
-            return [
-                'id' => $user['user_id'],
-                'email' => $user['email'],
-                'name' => $user['display_name'],
-                'role' => $user['role'],
-                'last_login' => $user['last_login'],
-                'created_at' => $user['created_at']
-            ];
-        }
-        return $user;
-    }
-
-    /**
      * Refresh current user data from database
      */
     public function refreshUser()
@@ -404,88 +384,35 @@ class Auth
     /**
      * Get all users
      */
-    public function getUsers($filters = [])
+    public function getUsers($page = 1, $perPage = 20)
     {
         if (!$this->isAdmin()) {
             throw new Exception("Only admins can view users");
         }
 
-        // Handle both array and individual parameters for backward compatibility
-        if (!is_array($filters)) {
-            // Old style parameters: getUsers($page, $perPage)
-            $page = $filters;
-            $perPage = func_num_args() > 1 ? func_get_arg(1) : 20;
-            $filters = ['page' => $page, 'per_page' => $perPage];
-        }
-
-        // Extract parameters from filters array
-        $page = isset($filters['page']) ? (int)$filters['page'] : 1;
-        $perPage = isset($filters['per_page']) ? (int)$filters['per_page'] : 20;
-        $search = isset($filters['search']) ? trim($filters['search']) : null;
-        $role = isset($filters['role']) ? $filters['role'] : null;
-
         $offset = ($page - 1) * $perPage;
 
-        // Build WHERE clauses and parameters
-        $whereClauses = [];
-        $params = [];
+        $sql = "SELECT user_id, email, display_name, role, last_login, created_at 
+                FROM users 
+                ORDER BY created_at DESC 
+                LIMIT :offset, :limit";
 
-        if (!empty($search) && is_string($search) && trim($search) !== '') {
-            $whereClauses[] = "(display_name LIKE :search OR email LIKE :search)";
-            $params['search'] = '%' . trim($search) . '%';
-        }
-
-        if (!empty($role) && is_string($role) && trim($role) !== '') {
-            $whereClauses[] = "role = :role";
-            $params['role'] = trim($role);
-        }
-
-        $sql = "SELECT user_id as id, email, display_name as name, role, last_login, created_at 
-                FROM users";
-
-        if (!empty($whereClauses)) {
-            $sql .= " WHERE " . implode(" AND ", $whereClauses);
-        }
-
-        $sql .= " ORDER BY created_at DESC LIMIT " . (int)$offset . ", " . (int)$perPage;
-
-        return $this->db->getRows($sql, $params);
+        return $this->db->getRows($sql, [
+            'offset' => $offset,
+            'limit' => $perPage
+        ]);
     }
 
     /**
      * Get total users count
      */
-    public function getUsersCount($filters = [])
+    public function getUsersCount()
     {
         if (!$this->isAdmin()) {
             throw new Exception("Only admins can view user count");
         }
 
-        // Extract parameters from filters array
-        $search = isset($filters['search']) ? trim($filters['search']) : null;
-        $role = isset($filters['role']) ? $filters['role'] : null;
-
-        // Build WHERE clauses and parameters
-        $whereClauses = [];
-        $params = [];
-
-        if (!empty($search) && is_string($search) && trim($search) !== '') {
-            $whereClauses[] = "(display_name LIKE :search OR email LIKE :search)";
-            $params['search'] = '%' . trim($search) . '%';
-        }
-
-        if (!empty($role) && is_string($role) && trim($role) !== '') {
-            $whereClauses[] = "role = :role";
-            $params['role'] = trim($role);
-        }
-
-        $sql = "SELECT COUNT(*) FROM users";
-
-        if (!empty($whereClauses)) {
-            $sql .= " WHERE " . implode(" AND ", $whereClauses);
-        }
-
-        return $this->db->getValue($sql, $params);
+        return $this->db->getValue("SELECT COUNT(*) FROM users");
     }
 
     /**
@@ -494,44 +421,5 @@ class Auth
     public function fetchColumn($sql, $params = [])
     {
         return $this->db->getValue($sql, $params);
-    }
-
-    /**
-     * Get download count for a specific user
-     */
-    public function getUserDownloadsCount($userId)
-    {
-        if (!$this->isAdmin()) {
-            throw new Exception("Only admins can view user download counts");
-        }
-
-        $sql = "SELECT COUNT(*) FROM downloads WHERE user_id = :user_id";
-        return $this->db->getValue($sql, ['user_id' => $userId]);
-    }
-
-    /**
-     * Get favorites count for a specific user
-     */
-    public function getUserFavoritesCount($userId)
-    {
-        if (!$this->isAdmin()) {
-            throw new Exception("Only admins can view user favorites counts");
-        }
-
-        $sql = "SELECT COUNT(*) FROM favorites WHERE user_id = :user_id";
-        return $this->db->getValue($sql, ['user_id' => $userId]);
-    }
-
-    /**
-     * Get requests count for a specific user
-     */
-    public function getUserRequestsCount($userId)
-    {
-        if (!$this->isAdmin()) {
-            throw new Exception("Only admins can view user requests counts");
-        }
-
-        $sql = "SELECT COUNT(*) FROM book_requests WHERE requester_id = :user_id";
-        return $this->db->getValue($sql, ['user_id' => $userId]);
     }
 }

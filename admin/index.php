@@ -32,8 +32,7 @@ $totalDownloads = $db->fetchColumn("SELECT COUNT(*) FROM downloads");
 // Get recent activities
 $recentBooksData = $bookObj->getBooks(['page' => 1, 'per_page' => 5]); // Page 1, 5 items per page
 $recentBooks = $recentBooksData['books'] ?? [];
-$recentRequestsData = $requestObj->getRequests(['admin_view' => true, 'page' => 1, 'per_page' => 5]); // Page 1, 5 items per page
-$recentRequests = $recentRequestsData['requests'] ?? [];
+$recentRequests = $requestObj->getRequests(1, 5); // Page 1, 5 items per page
 
 // Page title
 $pageTitle = 'Admin Dashboard - DUET PDF Library';
@@ -218,7 +217,7 @@ include '../includes/header.php';
                     <a href="requests.php" class="btn btn-sm btn-outline-primary">View All</a>
                 </div>
                 <div class="card-body p-0">
-                    <?php if (empty($recentRequests) || !is_array($recentRequests)): ?>
+                    <?php if (empty($recentRequests)): ?>
                         <div class="p-3">
                             <div class="alert alert-info mb-0">
                                 <i class="bi bi-info-circle-fill me-2"></i> No book requests found.
@@ -238,38 +237,34 @@ include '../includes/header.php';
                                 </thead>
                                 <tbody>
                                     <?php foreach ($recentRequests as $request): ?>
-                                        <?php if (is_array($request) && isset($request['title'])): ?>
-                                            <tr>
-                                                <td><?php echo htmlspecialchars($request['title'] ?? ''); ?></td>
-                                                <td><?php echo htmlspecialchars($request['requester_name'] ?? $request['user_name'] ?? 'Unknown'); ?></td>
-                                                <td>
-                                                    <?php
-                                                    $status = $request['status'] ?? '';
-                                                    if ($status === 'pending'): ?>
-                                                        <span class="badge bg-warning text-dark">Pending</span>
-                                                    <?php elseif ($status === 'fulfilled' || $status === 'approved'): ?>
-                                                        <span class="badge bg-success">Approved</span>
-                                                    <?php elseif ($status === 'rejected'): ?>
-                                                        <span class="badge bg-danger">Rejected</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td><?php echo isset($request['created_at']) ? date('M j, Y', strtotime($request['created_at'])) : 'N/A'; ?></td>
-                                                <td>
-                                                    <?php if (($request['status'] ?? '') === 'pending'): ?>
-                                                        <a href="process-request.php?id=<?php echo $request['request_id'] ?? $request['id'] ?? ''; ?>&action=approve" class="btn btn-sm btn-outline-success">
-                                                            <i class="bi bi-check-circle"></i>
-                                                        </a>
-                                                        <a href="process-request.php?id=<?php echo $request['request_id'] ?? $request['id'] ?? ''; ?>&action=reject" class="btn btn-sm btn-outline-danger">
-                                                            <i class="bi bi-x-circle"></i>
-                                                        </a>
-                                                    <?php else: ?>
-                                                        <a href="view-request.php?id=<?php echo $request['request_id'] ?? $request['id'] ?? ''; ?>" class="btn btn-sm btn-outline-primary">
-                                                            <i class="bi bi-eye"></i>
-                                                        </a>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endif; ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($request['title']); ?></td>
+                                            <td><?php echo htmlspecialchars($request['user_name']); ?></td>
+                                            <td>
+                                                <?php if ($request['status'] === 'pending'): ?>
+                                                    <span class="badge bg-warning text-dark">Pending</span>
+                                                <?php elseif ($request['status'] === 'approved'): ?>
+                                                    <span class="badge bg-success">Approved</span>
+                                                <?php elseif ($request['status'] === 'rejected'): ?>
+                                                    <span class="badge bg-danger">Rejected</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?php echo date('M j, Y', strtotime($request['created_at'])); ?></td>
+                                            <td>
+                                                <?php if ($request['status'] === 'pending'): ?>
+                                                    <a href="process-request.php?id=<?php echo $request['id']; ?>&action=approve" class="btn btn-sm btn-outline-success">
+                                                        <i class="bi bi-check-circle"></i>
+                                                    </a>
+                                                    <a href="process-request.php?id=<?php echo $request['id']; ?>&action=reject" class="btn btn-sm btn-outline-danger">
+                                                        <i class="bi bi-x-circle"></i>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a href="view-request.php?id=<?php echo $request['id']; ?>" class="btn btn-sm btn-outline-primary">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>

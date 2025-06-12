@@ -1,5 +1,4 @@
 <?php
-
 /**
  * DUET PDF Library - Book Request Page
  * Allows users to submit book requests
@@ -34,39 +33,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate form data
     $title = trim($_POST['title'] ?? '');
     $author = trim($_POST['author'] ?? '');
-    $reason = trim($_POST['reason'] ?? '');
-
+    $description = trim($_POST['description'] ?? '');
+    
     // Validate title
     if (empty($title)) {
         $errors[] = 'Book title is required';
     } elseif (strlen($title) > 255) {
         $errors[] = 'Book title is too long (maximum 255 characters)';
     }
-
+    
     // Validate author
     if (empty($author)) {
         $errors[] = 'Author name is required';
     } elseif (strlen($author) > 255) {
         $errors[] = 'Author name is too long (maximum 255 characters)';
     }
-
+    
     // If no errors, submit request
     if (empty($errors)) {
         try {
-            $requestObj->submitRequest([
-                'title' => $title,
-                'author' => $author,
-                'reason' => $reason
-            ]);
+            $requestObj->submitRequest($title, $author, $description);
             $success = true;
-
+            
             // Clear form data
-            $title = $author = $reason = '';
-
+            $title = $author = $description = '';
+            
             // Set success message
             $_SESSION['flash_message'] = 'Your book request has been submitted successfully. An administrator will review it soon.';
             $_SESSION['flash_type'] = 'success';
-
+            
             // Redirect to avoid form resubmission
             header('Location: request.php');
             exit;
@@ -105,7 +100,7 @@ include 'includes/header.php';
                             <i class="bi bi-check-circle-fill me-2"></i> Your book request has been submitted successfully. An administrator will review it soon.
                         </div>
                     <?php endif; ?>
-
+                    
                     <?php if (!empty($errors)): ?>
                         <div class="alert alert-danger">
                             <ul class="mb-0">
@@ -115,30 +110,30 @@ include 'includes/header.php';
                             </ul>
                         </div>
                     <?php endif; ?>
-
+                    
                     <form method="post" action="request.php">
                         <div class="mb-3">
                             <label for="title" class="form-label">Book Title <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="title" name="title" value="<?php echo htmlspecialchars($title ?? ''); ?>" required>
                             <div class="form-text">Enter the complete title of the book you're requesting.</div>
                         </div>
-
+                        
                         <div class="mb-3">
                             <label for="author" class="form-label">Author <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="author" name="author" value="<?php echo htmlspecialchars($author ?? ''); ?>" required>
                             <div class="form-text">Enter the name of the author(s).</div>
                         </div>
-
+                        
                         <div class="mb-3">
-                            <label for="reason" class="form-label">Additional Information</label>
-                            <textarea class="form-control" id="reason" name="reason" rows="4"><?php echo htmlspecialchars($reason ?? ''); ?></textarea>
+                            <label for="description" class="form-label">Additional Information</label>
+                            <textarea class="form-control" id="description" name="description" rows="4"><?php echo htmlspecialchars($description ?? ''); ?></textarea>
                             <div class="form-text">Provide any additional details about the book, such as ISBN, publication year, edition, or why you need this book.</div>
                         </div>
-
+                        
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle-fill me-2"></i> Your request will be reviewed by an administrator. If approved, the book will be added to the library.
                         </div>
-
+                        
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-send me-2"></i> Submit Request
@@ -150,58 +145,58 @@ include 'includes/header.php';
                     </form>
                 </div>
             </div>
-
+            
             <!-- My Requests Section -->
             <?php
             // Get user's requests
             $userRequests = $requestObj->getUserRequests($auth->getUserId());
             if (!empty($userRequests)):
             ?>
-                <div class="card shadow mt-4">
-                    <div class="card-header bg-light">
-                        <h5 class="mb-0">My Book Requests</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead>
+            <div class="card shadow mt-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">My Book Requests</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Author</th>
+                                    <th>Status</th>
+                                    <th>Requested On</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($userRequests as $request): ?>
                                     <tr>
-                                        <th>Title</th>
-                                        <th>Author</th>
-                                        <th>Status</th>
-                                        <th>Requested On</th>
-                                        <th>Actions</th>
+                                        <td><?php echo htmlspecialchars($request['title']); ?></td>
+                                        <td><?php echo htmlspecialchars($request['author']); ?></td>
+                                        <td>
+                                            <?php if ($request['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning text-dark">Pending</span>
+                                            <?php elseif ($request['status'] === 'approved'): ?>
+                                                <span class="badge bg-success">Approved</span>
+                                            <?php elseif ($request['status'] === 'rejected'): ?>
+                                                <span class="badge bg-danger">Rejected</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?php echo date('M j, Y', strtotime($request['created_at'])); ?></td>
+                                        <td>
+                                            <?php if ($request['status'] === 'pending'): ?>
+                                                <a href="delete-request.php?id=<?php echo $request['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this request?');">
+                                                    <i class="bi bi-trash"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($userRequests as $request): ?>
-                                        <tr>
-                                            <td><?php echo htmlspecialchars($request['title']); ?></td>
-                                            <td><?php echo htmlspecialchars($request['author']); ?></td>
-                                            <td>
-                                                <?php if ($request['status'] === 'pending'): ?>
-                                                    <span class="badge bg-warning text-dark">Pending</span>
-                                                <?php elseif ($request['status'] === 'fulfilled' || $request['status'] === 'approved'): ?>
-                                                    <span class="badge bg-success">Approved</span>
-                                                <?php elseif ($request['status'] === 'rejected'): ?>
-                                                    <span class="badge bg-danger">Rejected</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td><?php echo date('M j, Y', strtotime($request['created_at'])); ?></td>
-                                            <td>
-                                                <?php if ($request['status'] === 'pending'): ?>
-                                                    <a href="delete-request.php?id=<?php echo $request['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this request?');">
-                                                        <i class="bi bi-trash"></i>
-                                                    </a>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
+            </div>
             <?php endif; ?>
         </div>
     </div>

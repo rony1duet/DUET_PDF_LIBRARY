@@ -114,7 +114,9 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
+        $sql .= " LIMIT :offset, :limit";
+        $params['offset'] = $offset;
+        $params['limit'] = $perPage;
 
         // Get total count for pagination
         $countSql = "SELECT COUNT(*) FROM books b";
@@ -122,19 +124,15 @@ class Book
             $countSql .= " WHERE " . implode(' AND ', $whereClauses);
         }
 
-        $countParams = $params;
-        unset($countParams['offset'], $countParams['limit']); // Remove pagination params for count query
+        // Create a copy of params without pagination parameters
+        $countParams = array_filter($params, function ($key) {
+            return $key !== 'offset' && $key !== 'limit';
+        }, ARRAY_FILTER_USE_KEY);
+
         $totalCount = $this->db->getValue($countSql, $countParams);
 
         // Get books
         $books = $this->db->getRows($sql, $params);
-
-        return [
-            'books' => $books,
-            'total' => $totalCount,
-            'pages' => ceil($totalCount / $perPage),
-            'current_page' => $page
-        ];
 
         return [
             'books' => $books,
@@ -498,7 +496,7 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
+        $sql .= " LIMIT :offset, :limit";
 
         // Get total count for pagination
         $countSql = "SELECT COUNT(*) FROM favorites f 
@@ -509,7 +507,9 @@ class Book
 
         // Get books
         $books = $this->db->getRows($sql, [
-            'user_id' => $userId
+            'user_id' => $userId,
+            'offset' => $offset,
+            'limit' => $perPage
         ]);
 
         return [
@@ -659,7 +659,9 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
+        $sql .= " LIMIT :offset, :limit";
+        $params['offset'] = $offset;
+        $params['limit'] = $perPage;
 
         return $this->db->getRows($sql, $params);
     }
@@ -719,10 +721,14 @@ class Book
                 INNER JOIN books b ON d.book_id = b.book_id
                 WHERE d.user_id = :user_id AND b.status = 'approved'
                 ORDER BY d.downloaded_at DESC
-                LIMIT " . (int)(($page - 1) * $perPage) . ", " . (int)$perPage;
+                LIMIT :offset, :limit";
+
+        $offset = ($page - 1) * $perPage;
 
         return $this->db->getRows($sql, [
-            'user_id' => $userId
+            'user_id' => $userId,
+            'offset' => $offset,
+            'limit' => $perPage
         ]);
     }
 
@@ -731,16 +737,19 @@ class Book
      */
     public function getDownloadHistory($page = 1, $perPage = 10)
     {
-        $offset = ($page - 1) * $perPage;
-
         $sql = "SELECT d.*, b.title, b.author, u.display_name as user_name, u.email
                 FROM downloads d
                 INNER JOIN books b ON d.book_id = b.book_id
                 INNER JOIN users u ON d.user_id = u.user_id
                 ORDER BY d.downloaded_at DESC
-                LIMIT " . (int)$offset . ", " . (int)$perPage;
+                LIMIT :offset, :limit";
 
-        return $this->db->getRows($sql, []);
+        $offset = ($page - 1) * $perPage;
+
+        return $this->db->getRows($sql, [
+            'offset' => $offset,
+            'limit' => $perPage
+        ]);
     }
 
     /**
