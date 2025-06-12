@@ -273,7 +273,7 @@ class Category
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         // Get total count for pagination
         $countSql = "SELECT COUNT(*) FROM books b WHERE b.category_id = :category_id";
@@ -284,6 +284,7 @@ class Category
         $totalCount = $this->db->getValue($countSql, ['category_id' => $categoryId]);
 
         // Get books
+        $books = $this->db->getRows($sql, ['category_id' => $categoryId]);
         $books = $this->db->getRows($sql, [
             'category_id' => $categoryId,
             'offset' => $offset,

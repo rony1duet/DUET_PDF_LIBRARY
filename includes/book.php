@@ -114,9 +114,7 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
-        $params['offset'] = $offset;
-        $params['limit'] = $perPage;
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         // Get total count for pagination
         $countSql = "SELECT COUNT(*) FROM books b";
@@ -124,15 +122,19 @@ class Book
             $countSql .= " WHERE " . implode(' AND ', $whereClauses);
         }
 
-        // Create a copy of params without pagination parameters
-        $countParams = array_filter($params, function ($key) {
-            return $key !== 'offset' && $key !== 'limit';
-        }, ARRAY_FILTER_USE_KEY);
-
+        $countParams = $params;
+        unset($countParams['offset'], $countParams['limit']); // Remove pagination params for count query
         $totalCount = $this->db->getValue($countSql, $countParams);
 
         // Get books
         $books = $this->db->getRows($sql, $params);
+
+        return [
+            'books' => $books,
+            'total' => $totalCount,
+            'pages' => ceil($totalCount / $perPage),
+            'current_page' => $page
+        ];
 
         return [
             'books' => $books,
@@ -166,10 +168,11 @@ class Book
 
         return $this->db->getRow($sql, ['book_id' => $bookId]);
     }
+
     /**
      * Add a new book
      */
-    public function addBook($data, $file, $coverData = null)
+    public function addBook($data, $file, $coverFile = null)
     {
         // Validate required fields
         $requiredFields = ['title', 'author', 'category_id'];
@@ -229,16 +232,46 @@ class Book
         // Delete temporary file
         unlink($tempPath);
 
-        // Handle cover data (new enhanced system supports both PDF page selection and image upload)
+        // Handle cover image upload if provided
         $coverPath = null;
-        if ($coverData !== null) {
-            if (is_array($coverData) && isset($coverData['type']) && $coverData['type'] === 'pdf_page') {
-                // Handle PDF page as cover
-                $pageNumber = (int)($coverData['page'] ?? 1);
-                $coverPath = $this->extractPdfPageAsCover($uploadResult, $pageNumber, $sanitizedTitle);
-            } elseif (is_array($coverData) && isset($coverData['tmp_name']) && $coverData['error'] === UPLOAD_ERR_OK) {
-                // Handle traditional cover image upload
-                $coverPath = $this->handleCoverImageUpload($coverData, $sanitizedTitle);
+        if ($coverFile && isset($coverFile['tmp_name']) && $coverFile['error'] === UPLOAD_ERR_OK) {
+            // Validate cover image
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $coverMime = finfo_file($finfo, $coverFile['tmp_name']);
+            finfo_close($finfo);
+
+            if (!in_array($coverMime, ALLOWED_IMAGE_TYPES)) {
+                throw new Exception("Cover image must be JPEG, PNG, or GIF");
+            }
+
+            // Check cover file size (max 5MB)
+            if ($coverFile['size'] > 5 * 1024 * 1024) {
+                throw new Exception("Cover image size must be less than 5MB");
+            }
+
+            // Generate unique filename for cover with pattern: $uniqueid_$title_$date.filetype
+            $sanitizedTitle = preg_replace('/[^a-zA-Z0-9_-]/', '_', $data['title']);
+            $sanitizedTitle = preg_replace('/_+/', '_', $sanitizedTitle); // Replace multiple underscores with single
+            $sanitizedTitle = trim($sanitizedTitle, '_');
+            $uniqueId = uniqid();
+            $currentDate = date('Y-m-d');
+            $extension = strtolower(pathinfo($coverFile['name'], PATHINFO_EXTENSION));
+            $coverFilename = $uniqueId . '_' . $sanitizedTitle . '_' . $currentDate . '.' . $extension;
+            $coverTempPath = UPLOAD_TEMP_DIR . '/' . $coverFilename;
+
+            // Move cover to temporary directory
+            if (move_uploaded_file($coverFile['tmp_name'], $coverTempPath)) {
+                try {
+                    // Upload cover to ImageKit (all files go to 'uploads' folder)
+                    $coverUploadResult = $this->uploadToImageKit($coverTempPath, $coverFilename);
+                    $coverPath = $coverUploadResult; // Store the path|fileId format
+                    // Delete temporary cover file
+                    unlink($coverTempPath);
+                } catch (Exception $e) {
+                    // Delete temporary file and rethrow exception (no local storage fallback)
+                    unlink($coverTempPath);
+                    throw new Exception('Failed to upload cover image: ' . $e->getMessage());
+                }
             }
         }
 
@@ -496,7 +529,7 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         // Get total count for pagination
         $countSql = "SELECT COUNT(*) FROM favorites f 
@@ -507,9 +540,7 @@ class Book
 
         // Get books
         $books = $this->db->getRows($sql, [
-            'user_id' => $userId,
-            'offset' => $offset,
-            'limit' => $perPage
+            'user_id' => $userId
         ]);
 
         return [
@@ -659,9 +690,7 @@ class Book
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
-        $params['offset'] = $offset;
-        $params['limit'] = $perPage;
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         return $this->db->getRows($sql, $params);
     }
@@ -721,14 +750,10 @@ class Book
                 INNER JOIN books b ON d.book_id = b.book_id
                 WHERE d.user_id = :user_id AND b.status = 'approved'
                 ORDER BY d.downloaded_at DESC
-                LIMIT :offset, :limit";
-
-        $offset = ($page - 1) * $perPage;
+                LIMIT " . (int)(($page - 1) * $perPage) . ", " . (int)$perPage;
 
         return $this->db->getRows($sql, [
-            'user_id' => $userId,
-            'offset' => $offset,
-            'limit' => $perPage
+            'user_id' => $userId
         ]);
     }
 
@@ -737,19 +762,16 @@ class Book
      */
     public function getDownloadHistory($page = 1, $perPage = 10)
     {
+        $offset = ($page - 1) * $perPage;
+
         $sql = "SELECT d.*, b.title, b.author, u.display_name as user_name, u.email
                 FROM downloads d
                 INNER JOIN books b ON d.book_id = b.book_id
                 INNER JOIN users u ON d.user_id = u.user_id
                 ORDER BY d.downloaded_at DESC
-                LIMIT :offset, :limit";
+                LIMIT " . (int)$offset . ", " . (int)$perPage;
 
-        $offset = ($page - 1) * $perPage;
-
-        return $this->db->getRows($sql, [
-            'offset' => $offset,
-            'limit' => $perPage
-        ]);
+        return $this->db->getRows($sql, []);
     }
 
     /**
@@ -966,6 +988,7 @@ class Book
         // This is for backward compatibility with existing data only
         return null;
     }
+
     /**
      * Enhanced cover image URL helper
      */
@@ -973,16 +996,6 @@ class Book
     {
         if (empty($coverPath)) {
             return null;
-        }
-
-        // Check if it's JSON metadata for PDF page (fallback case)
-        if ($this->isJsonString($coverPath)) {
-            $metadata = json_decode($coverPath, true);
-            if ($metadata && isset($metadata['type']) && $metadata['type'] === 'pdf_page') {
-                // For PDF page metadata, we don't have an extracted image
-                // Return null or implement client-side PDF page rendering
-                return null;
-            }
         }
 
         // Check if it's an ImageKit path (contains |)
@@ -1025,364 +1038,5 @@ class Book
         }
 
         return null; // No valid image found
-    }
-    /**
-     * Check if a string is valid JSON
-     */
-    private function isJsonString($string)
-    {
-        if (!is_string($string)) {
-            return false;
-        }
-
-        json_decode($string);
-        return json_last_error() === JSON_ERROR_NONE;
-    }
-
-    /**
-     * Get PDF page metadata if cover is a PDF page
-     */
-    public function getPdfPageCoverData($coverPath)
-    {
-        if (empty($coverPath) || !$this->isJsonString($coverPath)) {
-            return null;
-        }
-
-        $metadata = json_decode($coverPath, true);
-        if ($metadata && isset($metadata['type']) && $metadata['type'] === 'pdf_page') {
-            return $metadata;
-        }
-
-        return null;
-    }
-
-    /**
-     * Handle traditional cover image upload
-     */    /**
-     * Handle traditional cover image upload
-     */
-    private function handleCoverImageUpload($coverFile, $sanitizedTitle)
-    {
-        // Validate cover image
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $coverMime = finfo_file($finfo, $coverFile['tmp_name']);
-        finfo_close($finfo);
-
-        if (!in_array($coverMime, ALLOWED_IMAGE_TYPES)) {
-            throw new Exception("Cover image must be JPEG, PNG, or GIF");
-        }
-
-        // Check cover file size (max 5MB)
-        if ($coverFile['size'] > 5 * 1024 * 1024) {
-            throw new Exception("Cover image size must be less than 5MB");
-        }
-
-        // Generate unique filename for cover with pattern: $uniqueid_$title_$date.filetype
-        $uniqueId = uniqid();
-        $currentDate = date('Y-m-d');
-        $extension = strtolower(pathinfo($coverFile['name'], PATHINFO_EXTENSION));
-        $coverFilename = $uniqueId . '_' . $sanitizedTitle . '_cover_' . $currentDate . '.' . $extension;
-        $coverTempPath = UPLOAD_TEMP_DIR . '/' . $coverFilename;
-
-        // Move cover to temporary directory
-        if (!move_uploaded_file($coverFile['tmp_name'], $coverTempPath)) {
-            throw new Exception("Failed to move cover image to temporary directory");
-        }
-
-        try {
-            // Upload cover to ImageKit (all files go to 'uploads' folder)
-            $coverUploadResult = $this->uploadToImageKit($coverTempPath, $coverFilename);
-            // Delete temporary cover file
-            unlink($coverTempPath);
-            return $coverUploadResult; // Store the path|fileId format
-        } catch (Exception $e) {
-            // Delete temporary file and rethrow exception
-            if (file_exists($coverTempPath)) {
-                unlink($coverTempPath);
-            }
-            throw new Exception('Failed to upload cover image: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Extract a specific page from PDF as cover image
-     */
-    private function extractPdfPageAsCover($pdfUploadResult, $pageNumber, $sanitizedTitle)
-    {
-        try {
-            // First, we need to download the PDF from ImageKit to extract the page
-            $pdfTempPath = $this->downloadPdfFromImageKit($pdfUploadResult);
-
-            if (!$pdfTempPath) {
-                throw new Exception('Failed to download PDF for page extraction');
-            }
-
-            // Extract the specified page as an image
-            $coverImagePath = $this->extractPageAsImage($pdfTempPath, $pageNumber, $sanitizedTitle);
-
-            // Clean up the temporary PDF file
-            if (file_exists($pdfTempPath)) {
-                unlink($pdfTempPath);
-            }
-
-            if (!$coverImagePath) {
-                // Fallback: Store metadata if extraction fails
-                return json_encode([
-                    'type' => 'pdf_page',
-                    'pdf_path' => $pdfUploadResult,
-                    'page' => $pageNumber,
-                    'generated_at' => date('Y-m-d H:i:s')
-                ]);
-            }
-
-            // Upload the extracted cover image to ImageKit
-            $coverUploadResult = $this->uploadToImageKit($coverImagePath, basename($coverImagePath));
-
-            // Clean up the temporary cover image
-            if (file_exists($coverImagePath)) {
-                unlink($coverImagePath);
-            }
-
-            return $coverUploadResult;
-        } catch (Exception $e) {
-            error_log('PDF page extraction error: ' . $e->getMessage());
-
-            // Fallback: Store metadata for manual processing
-            return json_encode([
-                'type' => 'pdf_page',
-                'pdf_path' => $pdfUploadResult,
-                'page' => $pageNumber,
-                'generated_at' => date('Y-m-d H:i:s'),
-                'extraction_error' => $e->getMessage()
-            ]);
-        }
-    }
-
-    /**
-     * Download PDF from ImageKit for processing
-     */
-    private function downloadPdfFromImageKit($pdfUploadResult)
-    {
-        try {
-            // Extract the file ID from the stored value
-            $parts = explode('|', $pdfUploadResult);
-            $fileId = $parts[1] ?? null;
-
-            if (!$fileId) {
-                throw new Exception('Invalid PDF file reference');
-            }
-
-            require_once __DIR__ . '/imagekit.php';
-            $imageKit = new ImageKitHelper();
-
-            // Get file details to retrieve the download URL
-            $fileDetails = $imageKit->getFileDetails($fileId);
-
-            if (!$fileDetails || !isset($fileDetails['url'])) {
-                throw new Exception('Could not retrieve PDF download URL');
-            }
-
-            // Download the PDF to a temporary location
-            $tempFileName = 'temp_pdf_' . uniqid() . '.pdf';
-            $tempPath = UPLOAD_TEMP_DIR . '/' . $tempFileName;
-
-            // Ensure temp directory exists
-            if (!is_dir(UPLOAD_TEMP_DIR)) {
-                mkdir(UPLOAD_TEMP_DIR, 0755, true);
-            }
-
-            // Download the file
-            $pdfContent = file_get_contents($fileDetails['url']);
-            if ($pdfContent === false) {
-                throw new Exception('Failed to download PDF from ImageKit');
-            }
-
-            if (file_put_contents($tempPath, $pdfContent) === false) {
-                throw new Exception('Failed to save PDF to temporary location');
-            }
-
-            return $tempPath;
-        } catch (Exception $e) {
-            error_log('PDF download error: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Extract a specific page from PDF as an image using multiple methods
-     */
-    private function extractPageAsImage($pdfPath, $pageNumber, $sanitizedTitle)
-    {
-        $outputPath = UPLOAD_TEMP_DIR . '/' . uniqid() . '_' . $sanitizedTitle . '_page' . $pageNumber . '_cover.jpg';
-
-        // Ensure temp directory exists
-        if (!is_dir(UPLOAD_TEMP_DIR)) {
-            mkdir(UPLOAD_TEMP_DIR, 0755, true);
-        }
-
-        // Method 1: Try Imagick (if available)
-        if ($this->extractPageWithImagick($pdfPath, $pageNumber, $outputPath)) {
-            return $outputPath;
-        }
-
-        // Method 2: Try Ghostscript (if available)
-        if ($this->extractPageWithGhostscript($pdfPath, $pageNumber, $outputPath)) {
-            return $outputPath;
-        }
-
-        // Method 3: Try pdftoppm (if available)
-        if ($this->extractPageWithPdftoppm($pdfPath, $pageNumber, $outputPath)) {
-            return $outputPath;
-        }
-
-        error_log('All PDF page extraction methods failed for page ' . $pageNumber);
-        return null;
-    }
-
-    /**
-     * Extract PDF page using Imagick
-     */
-    private function extractPageWithImagick($pdfPath, $pageNumber, $outputPath)
-    {
-        if (!extension_loaded('imagick') || !class_exists('\\Imagick')) {
-            return false;
-        }
-
-        try {
-            $imagickClass = '\\Imagick';
-            $imagick = new $imagickClass();
-
-            // Set resolution for better quality
-            $imagick->setResolution(300, 300);
-
-            // Read the specific page (Imagick uses 0-based indexing)
-            $imagick->readImage($pdfPath . '[' . ($pageNumber - 1) . ']');
-
-            // Set image format to JPEG
-            $imagick->setImageFormat('jpeg');
-
-            // Set compression quality
-            $imagick->setImageCompressionQuality(85);
-
-            // Resize to reasonable cover size while maintaining aspect ratio
-            $imagick->resizeImage(600, 800, $imagickClass::FILTER_LANCZOS, 1, true);
-
-            // Write the image
-            $result = $imagick->writeImage($outputPath);
-
-            // Clean up
-            $imagick->clear();
-            $imagick->destroy();
-
-            return $result && file_exists($outputPath);
-        } catch (Exception $e) {
-            error_log('Imagick PDF extraction error: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Extract PDF page using Ghostscript
-     */
-    private function extractPageWithGhostscript($pdfPath, $pageNumber, $outputPath)
-    {
-        // Check if Ghostscript is available
-        $gsCommand = $this->findGhostscriptCommand();
-        if (!$gsCommand) {
-            return false;
-        }
-
-        try {
-            $command = sprintf(
-                '%s -dNOPAUSE -dBATCH -dSAFER -sDEVICE=jpeg -dJPEGQ=85 -r300 -dFirstPage=%d -dLastPage=%d -sOutputFile=%s %s 2>&1',
-                $gsCommand,
-                $pageNumber,
-                $pageNumber,
-                escapeshellarg($outputPath),
-                escapeshellarg($pdfPath)
-            );
-
-            $output = [];
-            $returnVar = 0;
-            exec($command, $output, $returnVar);
-
-            return $returnVar === 0 && file_exists($outputPath);
-        } catch (Exception $e) {
-            error_log('Ghostscript PDF extraction error: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Extract PDF page using pdftoppm
-     */
-    private function extractPageWithPdftoppm($pdfPath, $pageNumber, $outputPath)
-    {
-        // Check if pdftoppm is available
-        if (!$this->isCommandAvailable('pdftoppm')) {
-            return false;
-        }
-
-        try {
-            $tempPrefix = UPLOAD_TEMP_DIR . '/' . uniqid() . '_page';
-
-            $command = sprintf(
-                'pdftoppm -jpeg -r 300 -f %d -l %d %s %s 2>&1',
-                $pageNumber,
-                $pageNumber,
-                escapeshellarg($pdfPath),
-                escapeshellarg($tempPrefix)
-            );
-
-            $output = [];
-            $returnVar = 0;
-            exec($command, $output, $returnVar);
-
-            // pdftoppm creates files with format: prefix-pagenumber.jpg
-            $generatedFile = $tempPrefix . '-' . str_pad($pageNumber, 6, '0', STR_PAD_LEFT) . '.jpg';
-
-            if ($returnVar === 0 && file_exists($generatedFile)) {
-                // Move to desired output path
-                if (rename($generatedFile, $outputPath)) {
-                    return true;
-                }
-            }
-
-            return false;
-        } catch (Exception $e) {
-            error_log('pdftoppm PDF extraction error: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Find Ghostscript command
-     */
-    private function findGhostscriptCommand()
-    {
-        $commands = ['gs', 'gswin32c', 'gswin64c', '/usr/bin/gs', '/usr/local/bin/gs'];
-
-        foreach ($commands as $cmd) {
-            if ($this->isCommandAvailable($cmd)) {
-                return $cmd;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Check if a command is available in the system
-     */
-    private function isCommandAvailable($command)
-    {
-        $output = [];
-        $returnVar = 0;
-
-        // Use 'where' on Windows, 'which' on Unix-like systems
-        $checkCommand = (PHP_OS_FAMILY === 'Windows') ? 'where' : 'which';
-        exec("$checkCommand $command 2>&1", $output, $returnVar);
-
-        return $returnVar === 0;
     }
 }

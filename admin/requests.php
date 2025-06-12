@@ -1,4 +1,5 @@
 <?php
+
 /**
  * DUET PDF Library - Admin Requests Management
  * Admin page to manage book requests
@@ -27,7 +28,7 @@ $perPage = 10;
 
 // Get filter parameters
 $status = isset($_GET['status']) ? $_GET['status'] : 'all';
-$validStatuses = ['all', 'pending', 'approved', 'rejected'];
+$validStatuses = ['all', 'pending', 'fulfilled', 'rejected'];
 if (!in_array($status, $validStatuses)) {
     $status = 'all';
 }
@@ -36,7 +37,7 @@ if (!in_array($status, $validStatuses)) {
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
 // Get requests with pagination
-$requests = $requestObj->getRequests([
+$requestsData = $requestObj->getRequests([
     'page' => $page,
     'per_page' => $perPage,
     'status' => $status === 'all' ? null : $status,
@@ -44,25 +45,20 @@ $requests = $requestObj->getRequests([
     'admin_view' => true // Ensure we get all requests regardless of user
 ]);
 
-// Get total count for pagination
-$totalRequests = $requestObj->getRequestsCount([
-    'status' => $status === 'all' ? null : $status,
-    'search' => !empty($search) ? $search : null,
-    'admin_view' => true
-]);
-
-// Calculate total pages
-$totalPages = ceil($totalRequests / $perPage);
+// Extract requests and pagination data
+$requests = $requestsData['requests'] ?? [];
+$totalRequests = $requestsData['total'] ?? 0;
+$totalPages = $requestsData['pages'] ?? 1;
 
 // Process request action if submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_id'], $_POST['action'])) {
     $requestId = (int)$_POST['request_id'];
     $action = $_POST['action'];
     $notes = isset($_POST['notes']) ? trim($_POST['notes']) : '';
-    
+
     try {
         if ($action === 'approve') {
-            $requestObj->processRequest($requestId, 'approved', $notes);
+            $requestObj->processRequest($requestId, 'fulfilled', $notes);
             $_SESSION['flash_message'] = 'Request approved successfully';
             $_SESSION['flash_type'] = 'success';
         } elseif ($action === 'reject') {
@@ -74,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_id'], $_POST[
             $_SESSION['flash_message'] = 'Request deleted successfully';
             $_SESSION['flash_type'] = 'success';
         }
-        
+
         // Redirect to refresh the page and prevent form resubmission
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit;
@@ -123,16 +119,16 @@ include '../includes/header.php';
                         <input type="text" class="form-control" name="search" placeholder="Search by title, author, or requester" value="<?php echo htmlspecialchars($search); ?>">
                     </div>
                 </div>
-                
+
                 <div class="col-md-4">
                     <select class="form-select" name="status">
                         <option value="all" <?php echo $status === 'all' ? 'selected' : ''; ?>>All Statuses</option>
                         <option value="pending" <?php echo $status === 'pending' ? 'selected' : ''; ?>>Pending</option>
-                        <option value="approved" <?php echo $status === 'approved' ? 'selected' : ''; ?>>Approved</option>
+                        <option value="fulfilled" <?php echo $status === 'fulfilled' ? 'selected' : ''; ?>>Approved</option>
                         <option value="rejected" <?php echo $status === 'rejected' ? 'selected' : ''; ?>>Rejected</option>
                     </select>
                 </div>
-                
+
                 <div class="col-md-3">
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-filter me-2"></i> Apply Filters
@@ -173,102 +169,102 @@ include '../includes/header.php';
                         <tbody>
                             <?php foreach ($requests as $request): ?>
                                 <tr>
-                                    <td><?php echo $request['id']; ?></td>
+                                    <td><?php echo $request['id'] ?? ''; ?></td>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($request['title']); ?></strong>
+                                        <strong><?php echo htmlspecialchars($request['title'] ?? ''); ?></strong>
                                     </td>
-                                    <td><?php echo htmlspecialchars($request['author']); ?></td>
+                                    <td><?php echo htmlspecialchars($request['author'] ?? ''); ?></td>
                                     <td>
                                         <span class="d-inline-block text-truncate" style="max-width: 150px;">
-                                            <?php echo htmlspecialchars($request['user_email']); ?>
+                                            <?php echo htmlspecialchars($request['user_email'] ?? ''); ?>
                                         </span>
                                     </td>
-                                    <td><?php echo date('M d, Y', strtotime($request['created_at'])); ?></td>
+                                    <td><?php echo !empty($request['created_at']) ? date('M d, Y', strtotime($request['created_at'])) : ''; ?></td>
                                     <td>
-                                        <?php if ($request['status'] === 'pending'): ?>
+                                        <?php if (($request['status'] ?? '') === 'pending'): ?>
                                             <span class="badge bg-warning text-dark">Pending</span>
-                                        <?php elseif ($request['status'] === 'approved'): ?>
+                                        <?php elseif (($request['status'] ?? '') === 'fulfilled'): ?>
                                             <span class="badge bg-success">Approved</span>
-                                        <?php elseif ($request['status'] === 'rejected'): ?>
+                                        <?php elseif (($request['status'] ?? '') === 'rejected'): ?>
                                             <span class="badge bg-danger">Rejected</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#viewRequestModal<?php echo $request['id']; ?>">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#viewRequestModal<?php echo $request['id'] ?? ''; ?>">
                                             <i class="bi bi-eye"></i>
                                         </button>
-                                        
-                                        <?php if ($request['status'] === 'pending'): ?>
-                                            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#approveRequestModal<?php echo $request['id']; ?>">
+
+                                        <?php if (($request['status'] ?? '') === 'pending'): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#approveRequestModal<?php echo $request['id'] ?? ''; ?>">
                                                 <i class="bi bi-check-lg"></i>
                                             </button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectRequestModal<?php echo $request['id']; ?>">
+                                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectRequestModal<?php echo $request['id'] ?? ''; ?>">
                                                 <i class="bi bi-x-lg"></i>
                                             </button>
                                         <?php endif; ?>
-                                        
-                                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteRequestModal<?php echo $request['id']; ?>">
+
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteRequestModal<?php echo $request['id'] ?? ''; ?>">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </td>
                                 </tr>
-                                
+
                                 <!-- View Request Modal -->
-                                <div class="modal fade" id="viewRequestModal<?php echo $request['id']; ?>" tabindex="-1" aria-labelledby="viewRequestModalLabel<?php echo $request['id']; ?>" aria-hidden="true">
+                                <div class="modal fade" id="viewRequestModal<?php echo $request['id'] ?? ''; ?>" tabindex="-1" aria-labelledby="viewRequestModalLabel<?php echo $request['id'] ?? ''; ?>" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title" id="viewRequestModalLabel<?php echo $request['id']; ?>">Request Details</h5>
+                                                <h5 class="modal-title" id="viewRequestModalLabel<?php echo $request['id'] ?? ''; ?>">Request Details</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <div class="modal-body">
                                                 <div class="mb-3">
                                                     <h6 class="fw-bold">Title</h6>
-                                                    <p><?php echo htmlspecialchars($request['title']); ?></p>
+                                                    <p><?php echo htmlspecialchars($request['title'] ?? ''); ?></p>
                                                 </div>
-                                                
+
                                                 <div class="mb-3">
                                                     <h6 class="fw-bold">Author</h6>
-                                                    <p><?php echo htmlspecialchars($request['author']); ?></p>
+                                                    <p><?php echo htmlspecialchars($request['author'] ?? ''); ?></p>
                                                 </div>
-                                                
-                                                <?php if (!empty($request['description'])): ?>
+
+                                                <?php if (!empty($request['reason'])): ?>
                                                     <div class="mb-3">
                                                         <h6 class="fw-bold">Description</h6>
-                                                        <p><?php echo nl2br(htmlspecialchars($request['description'])); ?></p>
+                                                        <p><?php echo nl2br(htmlspecialchars($request['reason'])); ?></p>
                                                     </div>
                                                 <?php endif; ?>
-                                                
+
                                                 <div class="mb-3">
                                                     <h6 class="fw-bold">Requested By</h6>
-                                                    <p><?php echo htmlspecialchars($request['user_email']); ?></p>
+                                                    <p><?php echo htmlspecialchars($request['user_email'] ?? ''); ?></p>
                                                 </div>
-                                                
+
                                                 <div class="mb-3">
                                                     <h6 class="fw-bold">Date Requested</h6>
-                                                    <p><?php echo date('F d, Y h:i A', strtotime($request['created_at'])); ?></p>
+                                                    <p><?php echo !empty($request['created_at']) ? date('F d, Y h:i A', strtotime($request['created_at'])) : ''; ?></p>
                                                 </div>
-                                                
+
                                                 <div class="mb-3">
                                                     <h6 class="fw-bold">Status</h6>
                                                     <p>
-                                                        <?php if ($request['status'] === 'pending'): ?>
+                                                        <?php if (($request['status'] ?? '') === 'pending'): ?>
                                                             <span class="badge bg-warning text-dark">Pending</span>
-                                                        <?php elseif ($request['status'] === 'approved'): ?>
+                                                        <?php elseif (($request['status'] ?? '') === 'fulfilled'): ?>
                                                             <span class="badge bg-success">Approved</span>
-                                                        <?php elseif ($request['status'] === 'rejected'): ?>
+                                                        <?php elseif (($request['status'] ?? '') === 'rejected'): ?>
                                                             <span class="badge bg-danger">Rejected</span>
                                                         <?php endif; ?>
                                                     </p>
                                                 </div>
-                                                
+
                                                 <?php if (!empty($request['admin_notes'])): ?>
                                                     <div class="mb-3">
                                                         <h6 class="fw-bold">Admin Notes</h6>
                                                         <p><?php echo nl2br(htmlspecialchars($request['admin_notes'])); ?></p>
                                                     </div>
                                                 <?php endif; ?>
-                                                
+
                                                 <?php if (!empty($request['processed_at'])): ?>
                                                     <div class="mb-3">
                                                         <h6 class="fw-bold">Processed On</h6>
@@ -282,28 +278,28 @@ include '../includes/header.php';
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Approve Request Modal -->
-                                <?php if ($request['status'] === 'pending'): ?>
-                                    <div class="modal fade" id="approveRequestModal<?php echo $request['id']; ?>" tabindex="-1" aria-labelledby="approveRequestModalLabel<?php echo $request['id']; ?>" aria-hidden="true">
+                                <?php if (($request['status'] ?? '') === 'pending'): ?>
+                                    <div class="modal fade" id="approveRequestModal<?php echo $request['id'] ?? ''; ?>" tabindex="-1" aria-labelledby="approveRequestModalLabel<?php echo $request['id'] ?? ''; ?>" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
                                                 <form method="post" action="">
-                                                    <input type="hidden" name="request_id" value="<?php echo $request['id']; ?>">
+                                                    <input type="hidden" name="request_id" value="<?php echo $request['id'] ?? ''; ?>">
                                                     <input type="hidden" name="action" value="approve">
-                                                    
+
                                                     <div class="modal-header">
-                                                        <h5 class="modal-title" id="approveRequestModalLabel<?php echo $request['id']; ?>">Approve Request</h5>
+                                                        <h5 class="modal-title" id="approveRequestModalLabel<?php echo $request['id'] ?? ''; ?>">Approve Request</h5>
                                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                     </div>
                                                     <div class="modal-body">
                                                         <p>Are you sure you want to approve this book request?</p>
-                                                        <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title']); ?></p>
-                                                        <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author']); ?></p>
-                                                        
+                                                        <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title'] ?? ''); ?></p>
+                                                        <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author'] ?? ''); ?></p>
+
                                                         <div class="mb-3">
-                                                            <label for="approveNotes<?php echo $request['id']; ?>" class="form-label">Notes (Optional)</label>
-                                                            <textarea class="form-control" id="approveNotes<?php echo $request['id']; ?>" name="notes" rows="3" placeholder="Add any notes or comments about this approval"></textarea>
+                                                            <label for="approveNotes<?php echo $request['id'] ?? ''; ?>" class="form-label">Notes (Optional)</label>
+                                                            <textarea class="form-control" id="approveNotes<?php echo $request['id'] ?? ''; ?>" name="notes" rows="3" placeholder="Add any notes or comments about this approval"></textarea>
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -314,27 +310,27 @@ include '../includes/header.php';
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <!-- Reject Request Modal -->
-                                    <div class="modal fade" id="rejectRequestModal<?php echo $request['id']; ?>" tabindex="-1" aria-labelledby="rejectRequestModalLabel<?php echo $request['id']; ?>" aria-hidden="true">
+                                    <div class="modal fade" id="rejectRequestModal<?php echo $request['id'] ?? ''; ?>" tabindex="-1" aria-labelledby="rejectRequestModalLabel<?php echo $request['id'] ?? ''; ?>" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
                                                 <form method="post" action="">
-                                                    <input type="hidden" name="request_id" value="<?php echo $request['id']; ?>">
+                                                    <input type="hidden" name="request_id" value="<?php echo $request['id'] ?? ''; ?>">
                                                     <input type="hidden" name="action" value="reject">
-                                                    
+
                                                     <div class="modal-header">
-                                                        <h5 class="modal-title" id="rejectRequestModalLabel<?php echo $request['id']; ?>">Reject Request</h5>
+                                                        <h5 class="modal-title" id="rejectRequestModalLabel<?php echo $request['id'] ?? ''; ?>">Reject Request</h5>
                                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                     </div>
                                                     <div class="modal-body">
                                                         <p>Are you sure you want to reject this book request?</p>
-                                                        <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title']); ?></p>
-                                                        <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author']); ?></p>
-                                                        
+                                                        <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title'] ?? ''); ?></p>
+                                                        <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author'] ?? ''); ?></p>
+
                                                         <div class="mb-3">
-                                                            <label for="rejectNotes<?php echo $request['id']; ?>" class="form-label">Reason for Rejection</label>
-                                                            <textarea class="form-control" id="rejectNotes<?php echo $request['id']; ?>" name="notes" rows="3" placeholder="Provide a reason for rejecting this request"></textarea>
+                                                            <label for="rejectNotes<?php echo $request['id'] ?? ''; ?>" class="form-label">Reason for Rejection</label>
+                                                            <textarea class="form-control" id="rejectNotes<?php echo $request['id'] ?? ''; ?>" name="notes" rows="3" placeholder="Provide a reason for rejecting this request"></textarea>
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -346,23 +342,23 @@ include '../includes/header.php';
                                         </div>
                                     </div>
                                 <?php endif; ?>
-                                
+
                                 <!-- Delete Request Modal -->
-                                <div class="modal fade" id="deleteRequestModal<?php echo $request['id']; ?>" tabindex="-1" aria-labelledby="deleteRequestModalLabel<?php echo $request['id']; ?>" aria-hidden="true">
+                                <div class="modal fade" id="deleteRequestModal<?php echo $request['id'] ?? ''; ?>" tabindex="-1" aria-labelledby="deleteRequestModalLabel<?php echo $request['id'] ?? ''; ?>" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered">
                                         <div class="modal-content">
                                             <form method="post" action="">
-                                                <input type="hidden" name="request_id" value="<?php echo $request['id']; ?>">
+                                                <input type="hidden" name="request_id" value="<?php echo $request['id'] ?? ''; ?>">
                                                 <input type="hidden" name="action" value="delete">
-                                                
+
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title" id="deleteRequestModalLabel<?php echo $request['id']; ?>">Delete Request</h5>
+                                                    <h5 class="modal-title" id="deleteRequestModalLabel<?php echo $request['id'] ?? ''; ?>">Delete Request</h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
                                                 <div class="modal-body">
                                                     <p>Are you sure you want to delete this book request? This action cannot be undone.</p>
-                                                    <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title']); ?></p>
-                                                    <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author']); ?></p>
+                                                    <p><strong>Title:</strong> <?php echo htmlspecialchars($request['title'] ?? ''); ?></p>
+                                                    <p><strong>Author:</strong> <?php echo htmlspecialchars($request['author'] ?? ''); ?></p>
                                                 </div>
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -376,7 +372,7 @@ include '../includes/header.php';
                         </tbody>
                     </table>
                 </div>
-                
+
                 <!-- Pagination -->
                 <?php if ($totalPages > 1): ?>
                     <nav aria-label="Page navigation" class="mt-4">
@@ -392,7 +388,7 @@ include '../includes/header.php';
                                     <span class="page-link">&laquo;</span>
                                 </li>
                             <?php endif; ?>
-                            
+
                             <?php
                             // Calculate range of page numbers to display
                             $startPage = max(1, $page - 2);
@@ -400,7 +396,7 @@ include '../includes/header.php';
                             if ($endPage - $startPage < 4 && $startPage > 1) {
                                 $startPage = max(1, $endPage - 4);
                             }
-                            
+
                             for ($i = $startPage; $i <= $endPage; $i++): ?>
                                 <li class="page-item <?php echo $i === $page ? 'active' : ''; ?>">
                                     <a class="page-link" href="?page=<?php echo $i; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>">
@@ -408,7 +404,7 @@ include '../includes/header.php';
                                     </a>
                                 </li>
                             <?php endfor; ?>
-                            
+
                             <?php if ($page < $totalPages): ?>
                                 <li class="page-item">
                                     <a class="page-link" href="?page=<?php echo $page + 1; ?>&status=<?php echo $status; ?>&search=<?php echo urlencode($search); ?>" aria-label="Next">

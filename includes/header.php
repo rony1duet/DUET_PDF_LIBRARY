@@ -75,22 +75,19 @@ if (!isset($pageTitle)) {
                                 href="<?php echo SITE_URL; ?>/categories.php">
                                 <i class="bi bi-grid me-1"></i>Categories
                             </a>
-                        </li>
-
-                        <?php if ($auth->isLoggedIn() && !$auth->isAdmin()): ?>
+                        </li> <?php if ($auth->isLoggedIn() && !$auth->isAdmin()): ?>
                             <li class="nav-item">
                                 <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'upload.php' ? 'active' : ''; ?>"
                                     href="<?php echo SITE_URL; ?>/upload.php">
                                     <i class="bi bi-upload me-1"></i>Upload
                                 </a>
                             </li>
-                            <?php if (!$auth->isAdmin()): ?> <li class="nav-item">
-                                    <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'request.php' ? 'active' : ''; ?>"
-                                        href="<?php echo SITE_URL; ?>/request.php">
-                                        <i class="bi bi-file-earmark-plus me-1"></i>Request
-                                    </a>
-                                </li>
-                            <?php endif; ?>
+                            <li class="nav-item">
+                                <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'request.php' ? 'active' : ''; ?>"
+                                    href="<?php echo SITE_URL; ?>/request.php">
+                                    <i class="bi bi-file-earmark-plus me-1"></i>Request
+                                </a>
+                            </li>
                         <?php endif; ?>
 
                         <?php if ($auth->isAdmin()): ?>
@@ -109,8 +106,14 @@ if (!isset($pageTitle)) {
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/books.php">
                                             <i class="bi bi-book me-2"></i>Books
                                         </a></li>
+                                    <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/add-book.php">
+                                            <i class="bi bi-plus-circle me-2"></i>Add Book
+                                        </a></li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/categories.php">
                                             <i class="bi bi-folder me-2"></i>Categories
+                                        </a></li>
+                                    <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/add-category.php">
+                                            <i class="bi bi-plus-square me-2"></i>Add Category
                                         </a></li>
                                     <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/admin/requests.php">
                                             <i class="bi bi-inbox me-2"></i>Requests

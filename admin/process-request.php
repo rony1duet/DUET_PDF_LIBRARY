@@ -1,4 +1,5 @@
 <?php
+
 /**
  * DUET PDF Library - Admin Process Request
  * Handles the processing (approval/rejection) of book requests
@@ -51,11 +52,11 @@ if ($request['status'] !== 'pending') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['action']) ? $_POST['action'] : '';
     $notes = isset($_POST['admin_notes']) ? trim($_POST['admin_notes']) : '';
-    
+
     if ($action === 'approve') {
         // Process approval
         $result = $requestObj->approveRequest($requestId, $notes);
-        
+
         if ($result) {
             $_SESSION['flash_message'] = 'Request approved successfully';
             $_SESSION['flash_type'] = 'success';
@@ -63,13 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_message'] = 'Failed to approve request';
             $_SESSION['flash_type'] = 'danger';
         }
-        
+
         header('Location: requests.php');
         exit;
     } elseif ($action === 'reject') {
         // Process rejection
         $result = $requestObj->rejectRequest($requestId, $notes);
-        
+
         if ($result) {
             $_SESSION['flash_message'] = 'Request rejected successfully';
             $_SESSION['flash_type'] = 'success';
@@ -77,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_message'] = 'Failed to reject request';
             $_SESSION['flash_type'] = 'danger';
         }
-        
+
         header('Location: requests.php');
         exit;
     } else {
@@ -136,12 +137,12 @@ include '../includes/header.php';
                         <div class="col-md-9"><?php echo htmlspecialchars($request['author']); ?></div>
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-3 fw-bold">Description:</div>
+                        <div class="col-md-3 fw-bold">Reason:</div>
                         <div class="col-md-9">
-                            <?php if (!empty($request['description'])): ?>
-                                <?php echo nl2br(htmlspecialchars($request['description'])); ?>
+                            <?php if (!empty($request['reason'])): ?>
+                                <?php echo nl2br(htmlspecialchars($request['reason'])); ?>
                             <?php else: ?>
-                                <span class="text-muted">No description provided</span>
+                                <span class="text-muted">No reason provided</span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -165,7 +166,7 @@ include '../includes/header.php';
                 </div>
             </div>
         </div>
-        
+
         <div class="col-lg-4">
             <!-- Process Request Form -->
             <div class="card shadow-sm mb-4">
@@ -178,7 +179,7 @@ include '../includes/header.php';
                             <label for="admin_notes" class="form-label">Admin Notes (Optional)</label>
                             <textarea class="form-control" id="admin_notes" name="admin_notes" rows="4" placeholder="Add notes about this request (visible to the user)"></textarea>
                         </div>
-                        
+
                         <div class="d-grid gap-2">
                             <button type="submit" name="action" value="approve" class="btn btn-success">
                                 <i class="bi bi-check-circle me-2"></i> Approve Request
@@ -190,7 +191,7 @@ include '../includes/header.php';
                     </form>
                 </div>
             </div>
-            
+
             <!-- Help Card -->
             <div class="card shadow-sm">
                 <div class="card-header bg-light">
@@ -203,7 +204,7 @@ include '../includes/header.php';
                         <li>Check if the book is already available in the library</li>
                         <li>Consider adding the book to your acquisition list</li>
                     </ul>
-                    
+
                     <p class="small mb-2">When rejecting a request:</p>
                     <ul class="small">
                         <li>Provide a clear reason in the admin notes</li>
