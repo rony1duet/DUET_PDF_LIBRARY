@@ -63,6 +63,7 @@ class Database
             return $stmt;
         } catch (PDOException $e) {
             error_log('Query Error: ' . $e->getMessage() . ' - SQL: ' . $sql);
+            error_log('Parameters: ' . print_r($params, true));
             throw $e; // Re-throw to be handled by caller
         }
     }

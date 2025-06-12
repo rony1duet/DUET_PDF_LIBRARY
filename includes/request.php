@@ -27,10 +27,20 @@ class BookRequest
      */
     public function getRequests($filters = [], $page = 1, $perPage = 10)
     {
+        // Handle pagination from filters array if provided
+        if (isset($filters['page'])) {
+            $page = (int)$filters['page'];
+        }
+        if (isset($filters['per_page'])) {
+            $perPage = (int)$filters['per_page'];
+        }
+
         $sql = "SELECT r.*, 
                       u.display_name as requester_name, 
+                      u.email as user_email,
                       a.display_name as admin_name,
-                      c.name as category_name
+                      c.name as category_name,
+                      r.request_id as id
                FROM book_requests r 
                LEFT JOIN users u ON r.requester_id = u.user_id 
                LEFT JOIN users a ON r.admin_id = a.user_id 
@@ -42,7 +52,7 @@ class BookRequest
         // Add filters
         if (!empty($filters)) {
             // Filter by status
-            if (isset($filters['status'])) {
+            if (isset($filters['status']) && $filters['status'] !== null) {
                 $whereClauses[] = "r.status = :status";
                 $params['status'] = $filters['status'];
             }
@@ -55,13 +65,13 @@ class BookRequest
 
             // Filter by search term
             if (isset($filters['search']) && !empty($filters['search'])) {
-                $whereClauses[] = "(r.title LIKE :search OR r.author LIKE :search OR r.reason LIKE :search)";
+                $whereClauses[] = "(r.title LIKE :search OR r.author LIKE :search OR r.reason LIKE :search OR u.display_name LIKE :search OR u.email LIKE :search)";
                 $params['search'] = '%' . $filters['search'] . '%';
             }
         }
 
-        // For non-admin users, only show their own requests
-        if (!$this->auth->isAdmin()) {
+        // For non-admin users, only show their own requests (unless admin_view is set)
+        if (!$this->auth->isAdmin() && !isset($filters['admin_view'])) {
             $whereClauses[] = "r.requester_id = :current_user_id";
             $params['current_user_id'] = $this->auth->getUserId();
         }
@@ -75,7 +85,8 @@ class BookRequest
         $sql .= " ORDER BY r.created_at DESC";
 
         // Get total count for pagination (before adding LIMIT parameters)
-        $countSql = "SELECT COUNT(*) FROM book_requests r";
+        $countSql = "SELECT COUNT(*) FROM book_requests r 
+                    LEFT JOIN users u ON r.requester_id = u.user_id";
         if (!empty($whereClauses)) {
             $countSql .= " WHERE " . implode(' AND ', $whereClauses);
         }
@@ -83,9 +94,7 @@ class BookRequest
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
-        $params['offset'] = $offset;
-        $params['limit'] = $perPage;
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         // Get requests
         $requests = $this->db->getRows($sql, $params);
@@ -105,8 +114,10 @@ class BookRequest
     {
         $sql = "SELECT r.*, 
                       u.display_name as requester_name, 
+                      u.email as user_email,
                       a.display_name as admin_name,
-                      c.name as category_name
+                      c.name as category_name,
+                      r.request_id as id
                FROM book_requests r 
                LEFT JOIN users u ON r.requester_id = u.user_id 
                LEFT JOIN users a ON r.admin_id = a.user_id 
@@ -181,7 +192,7 @@ class BookRequest
         }
 
         // Validate status
-        if (!in_array($status, ['fulfilled', 'rejected'])) {
+        if (!in_array($status, ['approved', 'rejected', 'fulfilled'])) {
             throw new Exception("Invalid status");
         }
 
@@ -308,7 +319,8 @@ class BookRequest
      */
     public function getRequestsCount($filters = [])
     {
-        $sql = "SELECT COUNT(*) FROM book_requests r";
+        $sql = "SELECT COUNT(*) FROM book_requests r 
+                LEFT JOIN users u ON r.requester_id = u.user_id";
 
         $params = [];
         $whereClauses = [];
@@ -316,7 +328,7 @@ class BookRequest
         // Add filters
         if (!empty($filters)) {
             // Filter by status
-            if (isset($filters['status'])) {
+            if (isset($filters['status']) && $filters['status'] !== null) {
                 $whereClauses[] = "r.status = :status";
                 $params['status'] = $filters['status'];
             }
@@ -326,6 +338,18 @@ class BookRequest
                 $whereClauses[] = "r.requester_id = :requester_id";
                 $params['requester_id'] = $filters['requester_id'];
             }
+
+            // Filter by search term
+            if (isset($filters['search']) && !empty($filters['search'])) {
+                $whereClauses[] = "(r.title LIKE :search OR r.author LIKE :search OR r.reason LIKE :search OR u.display_name LIKE :search OR u.email LIKE :search)";
+                $params['search'] = '%' . $filters['search'] . '%';
+            }
+        }
+
+        // For non-admin users, only show their own requests (unless admin_view is set)
+        if (!$this->auth->isAdmin() && !isset($filters['admin_view'])) {
+            $whereClauses[] = "r.requester_id = :current_user_id";
+            $params['current_user_id'] = $this->auth->getUserId();
         }
 
         if (!empty($whereClauses)) {
@@ -402,21 +426,20 @@ class BookRequest
 
         $sql = "SELECT r.*, 
                       a.display_name as admin_name,
-                      c.name as category_name
+                      c.name as category_name,
+                      r.request_id as id
                FROM book_requests r 
                LEFT JOIN users a ON r.admin_id = a.user_id 
                LEFT JOIN categories c ON r.category_id = c.category_id
                WHERE r.requester_id = :user_id
-               ORDER BY r.request_date DESC";
+               ORDER BY r.created_at DESC";
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
         return $this->db->getRows($sql, [
-            'user_id' => $userId,
-            'offset' => $offset,
-            'limit' => $perPage
+            'user_id' => $userId
         ]);
     }
 
@@ -441,12 +464,9 @@ class BookRequest
 
         // Add pagination
         $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT :offset, :limit";
+        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
 
-        return $this->db->getRows($sql, [
-            'offset' => $offset,
-            'limit' => $perPage
-        ]);
+        return $this->db->getRows($sql, []);
     }
 
     /**
