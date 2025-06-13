@@ -50,6 +50,12 @@ if ($book['status'] !== 'approved' && !$auth->isAdmin()) {
 // Get book categories
 $bookCategories = $bookObj->getBookCategories($bookId);
 
+// Get download count for this book
+$downloadCountQuery = "SELECT COUNT(*) as count FROM downloads WHERE book_id = ?";
+$stmt = $db->getConnection()->prepare($downloadCountQuery);
+$stmt->execute([$bookId]);
+$downloadResult = $stmt->fetch(PDO::FETCH_ASSOC);
+
 // Check if user has favorited this book
 $isFavorite = false;
 if ($auth->isLoggedIn()) {
@@ -144,15 +150,15 @@ include 'includes/header.php';
                         <div class="book-meta">
                             <div class="meta-item">
                                 <span class="meta-label">Published:</span>
-                                <span class="meta-value"><?php echo date('F j, Y', strtotime($book['publication_date'])); ?></span>
+                                <span class="meta-value"><?php echo !empty($book['published_year']) ? $book['published_year'] : 'Unknown'; ?></span>
                             </div>
                             <div class="meta-item">
                                 <span class="meta-label">Added:</span>
-                                <span class="meta-value"><?php echo date('F j, Y', strtotime($book['created_at'])); ?></span>
+                                <span class="meta-value"><?php echo !empty($book['created_at']) ? date('F j, Y', strtotime($book['created_at'])) : 'Unknown'; ?></span>
                             </div>
                             <div class="meta-item">
                                 <span class="meta-label">Downloads:</span>
-                                <span class="meta-value"><?php echo number_format($book['download_count']); ?></span>
+                                <span class="meta-value"><?php echo number_format($downloadResult['count'] ?? 0); ?></span>
                             </div>
                         </div>
 

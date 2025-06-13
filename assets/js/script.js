@@ -696,208 +696,431 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Enhanced notification system
-  function showNotification(message, type = 'info') {
-    // Remove existing notifications
-    const existing = document.querySelectorAll('.notification-toast');
-    existing.forEach(n => n.remove());
+  // Book Detail Page Functionality
+  initializeBookDetailPage();
 
-    const notification = document.createElement('div');
-    notification.className = `notification-toast notification-${type}`;
-    notification.innerHTML = `
-      <div class="notification-content">
-        <i class="bi bi-${type === 'error' ? 'exclamation-circle' : 'check-circle'}"></i>
-        <span>${message}</span>
-      </div>
-    `;
+  // Book detail page specific functionality
+  function initializeBookDetailPage() {
+    // Check if we're on the book detail page
+    if (!document.querySelector('.book-detail-page')) {
+      return;
+    }
 
-    // Style the notification
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${type === 'error' ? '#fee2e2' : '#d1fae5'};
-      color: ${type === 'error' ? '#dc2626' : '#065f46'};
-      padding: 1rem 1.5rem;
-      border-radius: 8px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-      z-index: 10000;
-      border-left: 4px solid ${type === 'error' ? '#dc2626' : '#10b981'};
-      animation: slideInRight 0.3s ease;
-    `;
+    // Initialize PDF viewer
+    initializePDFViewer();
 
-    // Add animation
-    if (!document.querySelector('#notificationAnimations')) {
-      const style = document.createElement('style');
-      style.id = 'notificationAnimations';
-      style.textContent = `
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(100%); }
-          to { opacity: 1; transform: translateX(0); }
+    // Initialize favorite functionality
+    initializeBookFavorites();
+
+    // Initialize fullscreen functionality
+    initializeFullscreenViewer();
+
+    // Initialize download tracking
+    initializeDownloadTracking();
+  }
+
+  // PDF Viewer functionality
+  function initializePDFViewer() {
+    const iframe = document.querySelector('.pdf-iframe');
+    const loadingIndicator = document.querySelector('.viewer-loading');
+
+    if (iframe && loadingIndicator) {
+      // Show loading indicator initially
+      loadingIndicator.style.display = 'flex';
+
+      // Hide loading indicator when iframe loads
+      iframe.addEventListener('load', function () {
+        loadingIndicator.style.display = 'none';
+        iframe.classList.add('loaded');
+      });
+
+      // Handle iframe load errors
+      iframe.addEventListener('error', function () {
+        loadingIndicator.innerHTML = `
+          <div class="error-icon">
+            <i class="bi bi-exclamation-triangle"></i>
+          </div>
+          <span>Failed to load PDF. Please try again.</span>
+        `;
+      });
+    }
+  }
+
+  // Book favorites functionality
+  function initializeBookFavorites() {
+    const favoriteForm = document.querySelector('.favorite-form');
+    const favoriteBtn = document.querySelector('.action-btn-favorite');
+
+    if (favoriteForm && favoriteBtn) {
+      favoriteForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        // Add loading state
+        favoriteBtn.disabled = true;
+        const originalContent = favoriteBtn.innerHTML;
+        favoriteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span>Processing...</span>';
+
+        // Submit form via fetch
+        const formData = new FormData(favoriteForm);
+
+        fetch(favoriteForm.action, {
+          method: 'POST',
+          body: formData
+        })
+          .then(response => response.text())
+          .then(() => {
+            // Reload page to update favorite status
+            window.location.reload();
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            favoriteBtn.disabled = false;
+            favoriteBtn.innerHTML = originalContent;
+            showToast('Error updating favorite status', 'danger');
+          });
+      });
+    }
+  }
+
+  // Fullscreen viewer functionality
+  function initializeFullscreenViewer() {
+    const fullscreenBtn = document.querySelector('.viewer-btn-fullscreen');
+    const pdfContainer = document.querySelector('.pdf-viewer-container');
+
+    if (fullscreenBtn && pdfContainer) {
+      fullscreenBtn.addEventListener('click', function () {
+        toggleFullscreen();
+      });
+
+      // Listen for fullscreen changes
+      document.addEventListener('fullscreenchange', function () {
+        updateFullscreenButton();
+      });
+    }
+  }
+
+  // Download tracking
+  function initializeDownloadTracking() {
+    const downloadBtns = document.querySelectorAll('[data-action="download"]');
+
+    downloadBtns.forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        // Add download animation
+        const icon = btn.querySelector('i');
+        if (icon) {
+          icon.classList.add('animate-bounce');
+          setTimeout(() => {
+            icon.classList.remove('animate-bounce');
+          }, 1000);
         }
-        .notification-content {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
+
+        // Track download (could be enhanced with analytics)
+        console.log('Download initiated for book:', btn.href);
+      });
+    });
+  }
+
+  // Enhanced mobile experience
+  initializeMobileBookPage();
+
+  // Mobile-specific book page enhancements
+  function initializeMobileBookPage() {
+    if (!document.querySelector('.book-detail-page')) {
+      return;
+    }
+
+    // Add swipe gestures for mobile PDF viewer (if supported)
+    const pdfContainer = document.querySelector('.pdf-viewer-container');
+    if (pdfContainer && 'ontouchstart' in window) {
+      let startX, startY, startTime;
+
+      pdfContainer.addEventListener('touchstart', function (e) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        startTime = Date.now();
+      }, { passive: true });
+
+      pdfContainer.addEventListener('touchend', function (e) {
+        if (!startX || !startY) return;
+
+        const endX = e.changedTouches[0].clientX;
+        const endY = e.changedTouches[0].clientY;
+        const diffX = startX - endX;
+        const diffY = startY - endY;
+        const timeDiff = Date.now() - startTime;
+
+        // Only process quick swipes
+        if (timeDiff > 300) return;
+
+        // Vertical swipe to toggle fullscreen
+        if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 50) {
+          if (diffY > 0) {
+            // Swipe up - enter fullscreen
+            if (!document.fullscreenElement) {
+              toggleFullscreen();
+            }
+          }
         }
-      `;
-      document.head.appendChild(style);
+
+        startX = startY = null;
+      }, { passive: true });
     }
 
-    document.body.appendChild(notification);
-
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.style.animation = 'slideInRight 0.3s ease reverse';
-        setTimeout(() => notification.remove(), 300);
-      }
-    }, 5000);
-  }
-
-  // Utility functions
-  function validatePdfFile(input) {
-    const file = input.files[0];
-    if (!file) return true;
-
-    const validTypes = ['application/pdf'];
-    const maxSize = 50 * 1024 * 1024; // 50MB
-
-    if (!validTypes.includes(file.type)) {
-      showError(input, 'Please select a valid PDF file.');
-      return false;
+    // Improve mobile scrolling behavior
+    const bookInfoWrapper = document.querySelector('.book-info-wrapper');
+    if (bookInfoWrapper && window.innerWidth <= 991) {
+      // Make sure sticky positioning works well on mobile
+      bookInfoWrapper.style.position = 'static';
     }
 
-    if (file.size > maxSize) {
-      showError(input, 'File size must be less than 50MB.');
-      return false;
-    }
-
-    clearError(input);
-    return true;
-  }
-
-  function validateForm(form) {
-    let isValid = true;
-    const requiredFields = form.querySelectorAll('[required]');
-
-    requiredFields.forEach(field => {
-      if (!validateField(field)) {
-        isValid = false;
-      }
+    // Add haptic feedback for supported devices
+    const actionBtns = document.querySelectorAll('.action-btn');
+    actionBtns.forEach(btn => {
+      btn.addEventListener('click', function () {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50); // Light haptic feedback
+        }
+      });
     });
-
-    return isValid;
   }
 
-  function validateField(field) {
-    const value = field.value.trim();
+  // Lazy loading for book cover images
+  function initializeLazyLoading() {
+    const bookCoverImages = document.querySelectorAll('.book-cover-image');
 
-    if (field.hasAttribute('required') && !value) {
-      showError(field, 'This field is required.');
-      return false;
-    }
+    if ('IntersectionObserver' in window) {
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            img.src = img.dataset.src || img.src;
+            img.classList.remove('lazy');
+            observer.unobserve(img);
+          }
+        });
+      });
 
-    if (field.type === 'email' && value && !isValidEmail(value)) {
-      showError(field, 'Please enter a valid email address.');
-      return false;
-    }
-
-    clearError(field);
-    return true;
-  }
-
-  function isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  }
-
-  function showError(field, message) {
-    clearError(field);
-
-    field.classList.add('is-invalid');
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'invalid-feedback';
-    errorDiv.textContent = message;
-    field.parentElement.appendChild(errorDiv);
-  }
-
-  function clearError(field) {
-    field.classList.remove('is-invalid');
-    const errorDiv = field.parentElement.querySelector('.invalid-feedback');
-    if (errorDiv) {
-      errorDiv.remove();
+      bookCoverImages.forEach(img => {
+        if (img.dataset.src) {
+          imageObserver.observe(img);
+        }
+      });
     }
   }
 
-  // Loading states for forms
-  const forms = document.querySelectorAll('form');
-  forms.forEach(form => {
-    form.addEventListener('submit', function () {
-      const submitButton = this.querySelector('button[type="submit"]');
-      if (submitButton && !submitButton.disabled) {
-        const originalText = submitButton.innerHTML;
-        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading...';
-        submitButton.disabled = true;
+  // Performance optimization for PDF loading
+  function optimizePDFLoading() {
+    const iframe = document.querySelector('.pdf-iframe');
+    if (!iframe) return;
 
-        // Re-enable after 10 seconds to prevent permanent disable
-        setTimeout(() => {
-          submitButton.innerHTML = originalText;
-          submitButton.disabled = false;
-        }, 10000);
-      }
+    // Add loading="lazy" attribute for better performance
+    iframe.setAttribute('loading', 'lazy');
+
+    // Preload PDF on hover (desktop only)
+    if (window.innerWidth > 768) {
+      const downloadBtns = document.querySelectorAll('[data-action="download"]');
+      downloadBtns.forEach(btn => {
+        btn.addEventListener('mouseenter', function () {
+          // Preload PDF in background
+          const link = document.createElement('link');
+          link.rel = 'prefetch';
+          link.href = iframe.src;
+          document.head.appendChild(link);
+        }, { once: true });
+      });
+    }
+  }
+
+  // Call additional initialization functions
+  initializeLazyLoading();
+  optimizePDFLoading();
+});
+
+// Global functions for book detail page
+window.toggleFullscreen = function () {
+  const pdfContainer = document.querySelector('.pdf-viewer-container');
+  const fullscreenBtn = document.querySelector('.viewer-btn-fullscreen');
+
+  if (!pdfContainer) return;
+
+  if (!document.fullscreenElement) {
+    pdfContainer.requestFullscreen().catch(err => {
+      console.error('Error attempting to enable fullscreen:', err);
+      showToast('Fullscreen not supported', 'warning');
     });
-  });
+  } else {
+    document.exitFullscreen();
+  }
+};
 
-  // Enhanced keyboard navigation
-  document.addEventListener('keydown', function (e) {
-    // ESC key to close modals
-    if (e.key === 'Escape') {
-      const activeModal = document.querySelector('.modal.show');
-      if (activeModal) {
-        const modal = bootstrap.Modal.getInstance(activeModal);
-        if (modal) modal.hide();
+function updateFullscreenButton() {
+  const fullscreenBtn = document.querySelector('.viewer-btn-fullscreen');
+  const icon = fullscreenBtn?.querySelector('i');
+
+  if (icon) {
+    if (document.fullscreenElement) {
+      icon.className = 'bi bi-fullscreen-exit';
+      fullscreenBtn.title = 'Exit Fullscreen';
+    } else {
+      icon.className = 'bi bi-fullscreen';
+      fullscreenBtn.title = 'Toggle Fullscreen';
+    }
+  }
+}
+
+window.confirmDelete = function (bookTitle) {
+  const message = `Are you sure you want to delete "${bookTitle}"?\n\nThis action cannot be undone and will permanently remove the book from the library.`;
+  return confirm(message);
+};
+
+// Enhanced toast notification function
+function showToast(message, type = 'info') {
+  // Remove existing toasts
+  const existingToasts = document.querySelectorAll('.custom-toast');
+  existingToasts.forEach(toast => toast.remove());
+
+  const toast = document.createElement('div');
+  toast.className = `custom-toast alert alert-${type} alert-dismissible fade show`;
+  toast.style.cssText = `
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    border: none;
+    border-radius: 12px;
+    animation: slideIn 0.3s ease-out;
+  `;
+
+  const iconMap = {
+    'success': 'check-circle',
+    'danger': 'exclamation-triangle',
+    'warning': 'exclamation-triangle',
+    'info': 'info-circle'
+  };
+
+  const icon = iconMap[type] || 'info-circle';
+
+  toast.innerHTML = `
+    <div class="d-flex align-items-center">
+      <i class="bi bi-${icon} me-2"></i>
+      <span>${message}</span>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.animation = 'slideOut 0.3s ease-in forwards';
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
+    }
+  }, 5000);
+}
+
+// Add CSS animations for toast
+if (!document.querySelector('#toast-animations')) {
+  const style = document.createElement('style');
+  style.id = 'toast-animations';
+  style.textContent = `
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
       }
     }
-
-    // Ctrl/Cmd + K for search focus
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      const searchInput = document.querySelector('input[name="search"]');
-      if (searchInput) {
-        searchInput.focus();
-        searchInput.select();
+    
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(100%);
+        opacity: 0;
       }
     }
-  });
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+      }
+      40% {
+        transform: translateY(-10px);
+      }
+      60% {
+        transform: translateY(-5px);
+      }
+    }
+    
+    .animate-bounce {
+      animation: bounce 1s ease-in-out;
+    }    `;
+  document.head.appendChild(style);
+}
 
-  // Performance optimization: Lazy loading for images
-  const images = document.querySelectorAll('img[data-src]');
-  if (images.length > 0) {
-    const imageObserver = new IntersectionObserver((entries) => {
+// Call additional initialization functions
+initializeLazyLoading();
+optimizePDFLoading();
+
+console.log('DUET PDF Library initialized successfully');
+
+// Lazy loading for book cover images
+function initializeLazyLoading() {
+  const bookCoverImages = document.querySelectorAll('.book-cover-image');
+
+  if ('IntersectionObserver' in window) {
+    const imageObserver = new IntersectionObserver((entries, observer) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const img = entry.target;
-          img.src = img.dataset.src;
-          img.removeAttribute('data-src');
-          imageObserver.unobserve(img);
+          img.src = img.dataset.src || img.src;
+          img.classList.remove('lazy');
+          observer.unobserve(img);
         }
       });
     });
 
-    images.forEach(img => {
-      imageObserver.observe(img);
+    bookCoverImages.forEach(img => {
+      if (img.dataset.src) {
+        imageObserver.observe(img);
+      }
     });
   }
+}
 
-  // Service worker registration for offline capabilities (if available)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Service worker not available, silently fail
+// Performance optimization for PDF loading
+function optimizePDFLoading() {
+  const iframe = document.querySelector('.pdf-iframe');
+  if (!iframe) return;
+
+  // Add loading="lazy" attribute for better performance
+  iframe.setAttribute('loading', 'lazy');
+
+  // Preload PDF on hover (desktop only)
+  if (window.innerWidth > 768) {
+    const downloadBtns = document.querySelectorAll('[data-action="download"]');
+    downloadBtns.forEach(btn => {
+      btn.addEventListener('mouseenter', function () {
+        // Preload PDF in background
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.href = iframe.src;
+        document.head.appendChild(link);
+      }, { once: true });
     });
   }
-  console.log('DUET PDF Library initialized successfully');
-});
+}
 
 // Global category delete function (accessible from inline onclick handlers)
 function handleCategoryDelete(button) {

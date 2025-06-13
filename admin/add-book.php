@@ -16,13 +16,13 @@ require_once '../includes/category.php';
 $db = Database::getInstance();
 $auth = Auth::getInstance();
 $bookObj = new Book($db, $auth);
-$categoryObj = new Category($db, $auth);
+$categoryObj = new Category();
 
 // Require admin access
 $auth->requireAdmin();
 
 // Get all categories for the form
-$categories = $categoryObj->getAllCategories();
+$categories = $categoryObj->getAllCategories(true);
 
 // Process form submission
 $errors = [];
