@@ -82,15 +82,26 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
         exit;
     }
 
-    // Record download
-    $bookObj->recordDownload($bookId, $auth->getUserId());
+    try {
+        // Get download URL (this will also record the download)
+        $downloadUrl = $bookObj->getDownloadUrl($bookId);
 
-    // Get download URL
-    $downloadUrl = $bookObj->getDownloadUrl($book['file_path']);
-
-    // Redirect to download URL
-    header('Location: ' . $downloadUrl);
-    exit;
+        if ($downloadUrl) {
+            // Redirect to download URL
+            header('Location: ' . $downloadUrl);
+            exit;
+        } else {
+            $_SESSION['flash_message'] = 'Unable to generate download link. Please try again later.';
+            $_SESSION['flash_type'] = 'error';
+            header('Location: book.php?id=' . $bookId);
+            exit;
+        }
+    } catch (Exception $e) {
+        $_SESSION['flash_message'] = 'Download failed: ' . $e->getMessage();
+        $_SESSION['flash_type'] = 'error';
+        header('Location: book.php?id=' . $bookId);
+        exit;
+    }
 }
 
 // Page title

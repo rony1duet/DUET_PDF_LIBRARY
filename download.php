@@ -53,24 +53,99 @@ try {
         exit;
     }
 
-    // Get download URL from ImageKit or local storage
-    $downloadUrl = $bookObj->getDownloadUrl($bookId);
+    try {
+        // Get the actual file URL (could be ImageKit or local)
+        $actualFileUrl = $bookObj->getActualFileUrl($bookId);
 
-    if (!$downloadUrl) {
-        $_SESSION['flash_message'] = 'File not found or unable to generate download link';
+        if (!$actualFileUrl) {
+            $_SESSION['flash_message'] = 'File not found or unable to generate download link';
+            $_SESSION['flash_type'] = 'error';
+            header('Location: book.php?id=' . $bookId);
+            exit;
+        }
+    } catch (Exception $e) {
+        $_SESSION['flash_message'] = 'Download failed: ' . $e->getMessage();
         $_SESSION['flash_type'] = 'error';
         header('Location: book.php?id=' . $bookId);
         exit;
     }
 
-    // Check if it's an ImageKit URL (external) or local file
-    if (strpos($downloadUrl, 'https://') === 0) {
-        // ImageKit URL - redirect to it
-        header('Location: ' . $downloadUrl);
-        exit;
+    // Generate proper filename based on book details
+    $cleanTitle = preg_replace('/[^a-zA-Z0-9\s\-_]/', '', $book['title']);
+    $cleanAuthor = preg_replace('/[^a-zA-Z0-9\s\-_]/', '', $book['author']);
+    $cleanEdition = !empty($book['edition']) ? preg_replace('/[^a-zA-Z0-9\s\-_]/', '', $book['edition']) : '';
+
+    // Build filename: Title_by_Author_Edition.pdf
+    $downloadFilename = $cleanTitle;
+    if (!empty($cleanAuthor)) {
+        $downloadFilename .= '_by_' . $cleanAuthor;
+    }
+    if (!empty($cleanEdition)) {
+        $downloadFilename .= '_' . $cleanEdition;
+    }
+    $downloadFilename .= '.pdf';
+
+    // Remove multiple spaces and replace with single underscore
+    $downloadFilename = preg_replace('/\s+/', '_', $downloadFilename);
+    // Remove multiple underscores
+    $downloadFilename = preg_replace('/_+/', '_', $downloadFilename);
+
+    // Check if it's an ImageKit URL (external) or local file path
+    if (strpos($actualFileUrl, 'https://') === 0 || strpos($actualFileUrl, 'http://') === 0) {
+        // External URL (ImageKit) - we need to proxy it with proper filename
+        try {
+            // Download the file content from ImageKit
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 60,
+                    'user_agent' => 'DUET PDF Library Download Proxy'
+                ]
+            ]);
+
+            // Set proper headers for PDF download
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $downloadFilename . '"');
+            header('Cache-Control: no-cache, no-store, must-revalidate');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+
+            // Clear any output buffers
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+
+            // Stream the file from ImageKit with proper filename
+            $fileHandle = fopen($actualFileUrl, 'rb', false, $context);
+            if ($fileHandle) {
+                while (!feof($fileHandle)) {
+                    echo fread($fileHandle, 8192);
+                    flush();
+                }
+                fclose($fileHandle);
+            } else {
+                throw new Exception('Unable to open remote file');
+            }
+            exit;
+        } catch (Exception $e) {
+            $_SESSION['flash_message'] = 'Error downloading file from remote storage: ' . $e->getMessage();
+            $_SESSION['flash_type'] = 'error';
+            header('Location: book.php?id=' . $bookId);
+            exit;
+        }
     } else {
-        // Local file - serve it directly with proper headers
-        $filePath = $downloadUrl;
+        // Local file path - serve it directly with proper headers
+        $filePath = $actualFileUrl;
+
+        // Security check - ensure file is within allowed directory
+        $allowedDir = realpath(__DIR__ . '/uploads');
+        $requestedFile = realpath($filePath);
+
+        if (!$requestedFile || strpos($requestedFile, $allowedDir) !== 0) {
+            $_SESSION['flash_message'] = 'Access denied: Invalid file path';
+            $_SESSION['flash_type'] = 'error';
+            header('Location: book.php?id=' . $bookId);
+            exit;
+        }
 
         // Make sure the file exists
         if (!file_exists($filePath)) {
@@ -82,10 +157,16 @@ try {
 
         // Set proper headers for PDF download
         header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . basename($book['title']) . '.pdf"');
+        header('Content-Disposition: attachment; filename="' . $downloadFilename . '"');
         header('Content-Length: ' . filesize($filePath));
-        header('Cache-Control: public, max-age=3600');
-        header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        // Clear any output buffers
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
 
         // Output the file
         readfile($filePath);

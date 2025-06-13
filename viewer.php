@@ -14,7 +14,7 @@ require_once 'includes/book.php';
 // Initialize objects
 $db = Database::getInstance();
 $auth = Auth::getInstance();
-$bookObj = new Book($db, $auth);
+$bookObj = new Book();
 
 // Check if file parameter is provided
 if (!isset($_GET['file']) || empty($_GET['file'])) {

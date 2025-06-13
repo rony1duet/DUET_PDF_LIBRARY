@@ -138,6 +138,48 @@ class Book
     }
 
     /**
+     * Get total count of books with optional filtering
+     */
+    public function getTotalBooks($filters = [])
+    {
+        $sql = "SELECT COUNT(*) as total FROM books b";
+        $params = [];
+        $whereClauses = [];
+
+        // Status filter
+        if (isset($filters['status']) && !empty($filters['status'])) {
+            $whereClauses[] = "b.status = :status";
+            $params['status'] = $filters['status'];
+        }
+
+        // Category filter
+        if (isset($filters['category']) && !empty($filters['category'])) {
+            $whereClauses[] = "b.category_id = :category_id";
+            $params['category_id'] = $filters['category'];
+        }
+
+        // Search filter
+        if (isset($filters['search']) && !empty($filters['search'])) {
+            $whereClauses[] = "(b.title LIKE :search OR b.author LIKE :search OR b.description LIKE :search)";
+            $params['search'] = '%' . $filters['search'] . '%';
+        }
+
+        // User filter (for books uploaded by specific user)
+        if (isset($filters['user_id']) && !empty($filters['user_id'])) {
+            $whereClauses[] = "b.uploaded_by = :user_id";
+            $params['user_id'] = $filters['user_id'];
+        }
+
+        // Add WHERE clause if we have conditions
+        if (!empty($whereClauses)) {
+            $sql .= " WHERE " . implode(' AND ', $whereClauses);
+        }
+
+        $result = $this->db->getRow($sql, $params);
+        return (int)$result['total'];
+    }
+
+    /**
      * Get a single book by ID
      */
     public function getBook($bookId)
@@ -396,8 +438,22 @@ class Book
             throw new Exception("You don't have permission to delete this book");
         }
 
-        // Delete from ImageKit (implementation depends on ImageKit SDK)
-        $this->deleteFromImageKit($book['file_path']);
+        // Delete PDF file from ImageKit
+        $pdfDeleted = $this->deleteFromImageKit($book['file_path']);
+
+        // Delete cover image from ImageKit if it exists
+        $coverDeleted = true; // Default to true if no cover
+        if (!empty($book['cover_path'])) {
+            $coverDeleted = $this->deleteFromImageKit($book['cover_path']);
+        }
+
+        // Log deletion results
+        if (!$pdfDeleted) {
+            error_log("Warning: Failed to delete PDF file from ImageKit for book ID: " . $bookId);
+        }
+        if (!$coverDeleted) {
+            error_log("Warning: Failed to delete cover image from ImageKit for book ID: " . $bookId);
+        }
 
         // Update category usage count
         if ($book['category_id']) {
@@ -426,35 +482,31 @@ class Book
         // Check if book exists and is approved
         $book = $this->getBook($bookId);
         if (!$book) {
-            throw new Exception("Book not found");
+            throw new Exception("Book not found with ID: " . $bookId);
+        }
+
+        // Check if book is approved (unless user is admin)
+        if ($book['status'] !== 'approved' && !$this->auth->isAdmin()) {
+            throw new Exception("This book is not available for download");
         }
 
         // Get user ID
         $userId = $this->auth->getUserId();
 
-        // Check if already downloaded (to prevent duplicate records)
-        $existing = $this->db->getRow(
-            "SELECT * FROM downloads WHERE user_id = :user_id AND book_id = :book_id",
-            ['user_id' => $userId, 'book_id' => $bookId]
-        );
+        // Use INSERT ... ON DUPLICATE KEY UPDATE to handle the unique constraint
+        // This will insert a new record or update the timestamp if record exists
+        $sql = "INSERT INTO downloads (user_id, book_id, ip_address, downloaded_at) 
+                VALUES (:user_id, :book_id, :ip_address, :downloaded_at)
+                ON DUPLICATE KEY UPDATE downloaded_at = VALUES(downloaded_at)";
 
-        if (!$existing) {
-            // Record download
-            $this->db->insert('downloads', [
-                'user_id' => $userId,
-                'book_id' => $bookId,
-                'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
-                'downloaded_at' => date('Y-m-d H:i:s')
-            ]);
-        } else {
-            // Update timestamp
-            $this->db->update(
-                'downloads',
-                ['downloaded_at' => date('Y-m-d H:i:s')],
-                'download_id = :download_id',
-                ['download_id' => $existing['download_id']]
-            );
-        }
+        $params = [
+            'user_id' => $userId,
+            'book_id' => $bookId,
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'downloaded_at' => date('Y-m-d H:i:s')
+        ];
+
+        $this->db->query($sql, $params);
 
         return $book['file_path'];
     }
@@ -515,9 +567,9 @@ class Book
     private function ensureViewsTableExists()
     {
         $sql = "CREATE TABLE IF NOT EXISTS book_views (
-            view_id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NULL,
-            book_id INT NOT NULL,
+            view_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NULL,
+            book_id INT UNSIGNED NOT NULL,
             ip_address VARCHAR(45),
             viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
@@ -525,479 +577,13 @@ class Book
             INDEX idx_book_views_book_id (book_id),
             INDEX idx_book_views_user_id (user_id),
             INDEX idx_book_views_date (viewed_at)
-        )";
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
         $this->db->getConnection()->exec($sql);
     }
 
     /**
-     * Get download URL for a book
-     */
-    public function getDownloadUrl($bookId)
-    {
-        // Record download and get file path
-        $filePath = $this->recordDownload($bookId);
-
-        // Generate download URL from ImageKit (implementation depends on ImageKit SDK)
-        return $this->getImageKitDownloadUrl($filePath);
-    }
-
-    /**
-     * Toggle favorite status for a book
-     */
-    public function toggleFavorite($bookId)
-    {
-        // Check if user is logged in
-        if (!$this->auth->isLoggedIn()) {
-            throw new Exception("You must be logged in to favorite books");
-        }
-
-        // Check if book exists
-        $book = $this->getBook($bookId);
-        if (!$book) {
-            throw new Exception("Book not found");
-        }
-
-        // Get user ID
-        $userId = $this->auth->getUserId();
-
-        // Check if already favorited
-        $existing = $this->db->getRow(
-            "SELECT * FROM favorites WHERE user_id = :user_id AND book_id = :book_id",
-            ['user_id' => $userId, 'book_id' => $bookId]
-        );
-
-        if ($existing) {
-            // Remove from favorites
-            $this->db->delete('favorites', 'favorite_id = :favorite_id', ['favorite_id' => $existing['favorite_id']]);
-            return false; // Not favorited anymore
-        } else {
-            // Add to favorites
-            $this->db->insert('favorites', [
-                'user_id' => $userId,
-                'book_id' => $bookId,
-                'created_at' => date('Y-m-d H:i:s')
-            ]);
-            return true; // Now favorited
-        }
-    }
-
-    /**
-     * Check if a book is favorited by the current user
-     */
-    public function isFavorited($bookId)
-    {
-        if (!$this->auth->isLoggedIn()) {
-            return false;
-        }
-
-        $userId = $this->auth->getUserId();
-
-        $result = $this->db->getRow(
-            "SELECT * FROM favorites WHERE user_id = :user_id AND book_id = :book_id",
-            ['user_id' => $userId, 'book_id' => $bookId]
-        );
-
-        return $result !== false;
-    }
-
-    /**
-     * Get user's favorite books
-     */
-    public function getFavorites($page = 1, $perPage = 10)
-    {
-        if (!$this->auth->isLoggedIn()) {
-            throw new Exception("You must be logged in to view favorites");
-        }
-
-        $userId = $this->auth->getUserId();
-
-        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name 
-               FROM favorites f 
-               JOIN books b ON f.book_id = b.book_id 
-               LEFT JOIN categories c ON b.category_id = c.category_id 
-               LEFT JOIN users u ON b.uploaded_by = u.user_id 
-               WHERE f.user_id = :user_id AND b.status = 'approved' 
-               ORDER BY f.created_at DESC";
-
-        // Add pagination
-        $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
-
-        // Get total count for pagination
-        $countSql = "SELECT COUNT(*) FROM favorites f 
-                     JOIN books b ON f.book_id = b.book_id 
-                     WHERE f.user_id = :user_id AND b.status = 'approved'";
-
-        $totalCount = $this->db->getValue($countSql, ['user_id' => $userId]);
-
-        // Get books
-        $books = $this->db->getRows($sql, [
-            'user_id' => $userId
-        ]);
-
-        return [
-            'books' => $books,
-            'total' => $totalCount,
-            'pages' => ceil($totalCount / $perPage),
-            'current_page' => $page
-        ];
-    }
-
-    /**
-     * Get categories for a specific book
-     */
-    public function getBookCategories($bookId)
-    {
-        $sql = "SELECT c.category_id as id, c.* FROM categories c 
-                INNER JOIN books b ON c.category_id = b.category_id 
-                WHERE b.book_id = :book_id";
-
-        return $this->db->getRows($sql, ['book_id' => $bookId]);
-    }
-
-    /**
-     * Check if a book is favorited by a user
-     */
-    public function isFavorite($bookId, $userId = null)
-    {
-        $userId = $userId ?: $this->auth->getUserId();
-
-        if (!$userId) {
-            return false;
-        }
-
-        $sql = "SELECT COUNT(*) FROM favorites 
-                WHERE book_id = :book_id AND user_id = :user_id";
-
-        return $this->db->getValue($sql, [
-            'book_id' => $bookId,
-            'user_id' => $userId
-        ]) > 0;
-    }
-
-    /**
-     * Get total number of books
-     */
-    public function getTotalBooks($filters = [])
-    {
-        $sql = "SELECT COUNT(*) FROM books b";
-
-        $params = [];
-        $whereClauses = [];
-
-        // Add filters
-        if (!empty($filters)) {
-            // Filter by status
-            if (isset($filters['status'])) {
-                $whereClauses[] = "b.status = :status";
-                $params['status'] = $filters['status'];
-            }
-
-            // Filter by category
-            if (isset($filters['category_id']) && $filters['category_id'] > 0) {
-                $whereClauses[] = "b.category_id = :category_id";
-                $params['category_id'] = $filters['category_id'];
-            }
-
-            // Filter by search
-            if (isset($filters['search']) && !empty($filters['search'])) {
-                $whereClauses[] = "(b.title LIKE :search OR b.author LIKE :search OR b.description LIKE :search)";
-                $params['search'] = '%' . $filters['search'] . '%';
-            }
-        }
-
-        if (!empty($whereClauses)) {
-            $sql .= " WHERE " . implode(" AND ", $whereClauses);
-        }
-
-        return $this->db->getValue($sql, $params);
-    }
-
-    /**
-     * Get books count (alias for getTotalBooks for backward compatibility)
-     */
-    public function getBooksCount($filters = [])
-    {
-        return $this->getTotalBooks($filters);
-    }
-
-    /**
-     * Get view URL for a book
-     */
-    public function getViewUrl($bookId)
-    {
-        $book = $this->getBook($bookId);
-        if (!$book) {
-            return null;
-        }
-
-        return SITE_URL . '/viewer.php?id=' . $bookId;
-    }
-
-    /**
-     * Get view URL from file path for PDF viewer
-     */
-    public function getFileViewUrl($filePath)
-    {
-        if (empty($filePath)) {
-            return null;
-        }
-
-        // Extract just the file path part (before the pipe if it exists)
-        $parts = explode('|', $filePath);
-        $actualPath = $parts[0];
-
-        // Check if ImageKit is configured
-        require_once __DIR__ . '/imagekit.php';
-        if (!ImageKitHelper::isConfigured()) {
-            // Use direct endpoint URL if ImageKit not configured
-            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-        }
-
-        try {
-            // Try to get ImageKit URL
-            $url = $this->getImageKitViewUrl($filePath);
-
-            if ($url) {
-                return $url;
-            }
-
-            // Fallback: construct direct URL using actual path
-            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-        } catch (Exception $e) {
-            // Log error and use fallback
-            error_log("Error getting file view URL: " . $e->getMessage());
-            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-        }
-    }
-
-    /**
-     * Get ImageKit view URL for PDF files
-     */
-    private function getImageKitViewUrl($filePath)
-    {
-        require_once __DIR__ . '/imagekit.php';
-
-        try {
-            // Extract the file ID from the stored value
-            $parts = explode('|', $filePath);
-            $actualPath = $parts[0]; // The actual file path without the ID
-            $fileId = $parts[1] ?? null;
-
-            if (!$fileId) {
-                // If no file ID, use the path directly
-                return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-            }
-
-            // Create ImageKit helper
-            $imageKit = new ImageKitHelper();
-
-            // Get file details to retrieve the actual filename/path
-            $fileDetails = $imageKit->getFileDetails($fileId);
-
-            if (!$fileDetails || !isset($fileDetails['filePath'])) {
-                error_log('ImageKit file details not found for fileId: ' . $fileId);
-                // Fallback to the actual path (first part before pipe)
-                return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-            }
-
-            // Use the actual ImageKit file path for URL generation
-            $retrievedPath = $fileDetails['filePath'];
-
-            // Get view URL using actual path
-            return $imageKit->getUrl($retrievedPath);
-        } catch (Exception $e) {
-            error_log("ImageKit view URL error: " . $e->getMessage());
-            // Fallback to direct endpoint URL using just the path part
-            $parts = explode('|', $filePath);
-            $actualPath = $parts[0];
-            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
-        }
-    }
-
-    /**
-     * Get downloads with optional filtering
-     */
-    public function getDownloads($filters = [], $page = 1, $perPage = 10)
-    {
-        $sql = "SELECT d.*, b.title, b.author, u.display_name as user_name, u.email
-                FROM downloads d
-                INNER JOIN books b ON d.book_id = b.book_id
-                INNER JOIN users u ON d.user_id = u.user_id";
-
-        $params = [];
-        $whereClauses = [];
-
-        // Add filters
-        if (!empty($filters)) {
-            // Filter by book
-            if (isset($filters['book_id'])) {
-                $whereClauses[] = "d.book_id = :book_id";
-                $params['book_id'] = $filters['book_id'];
-            }
-
-            // Filter by user
-            if (isset($filters['user_id'])) {
-                $whereClauses[] = "d.user_id = :user_id";
-                $params['user_id'] = $filters['user_id'];
-            }
-
-            // Filter by date range
-            if (isset($filters['date_from'])) {
-                $whereClauses[] = "DATE(d.downloaded_at) >= :date_from";
-                $params['date_from'] = $filters['date_from'];
-            }
-
-            if (isset($filters['date_to'])) {
-                $whereClauses[] = "DATE(d.downloaded_at) <= :date_to";
-                $params['date_to'] = $filters['date_to'];
-            }
-        }
-
-        if (!empty($whereClauses)) {
-            $sql .= " WHERE " . implode(" AND ", $whereClauses);
-        }
-
-        // Add ordering
-        $sql .= " ORDER BY d.downloaded_at DESC";
-
-        // Add pagination
-        $offset = ($page - 1) * $perPage;
-        $sql .= " LIMIT " . (int)$offset . ", " . (int)$perPage;
-
-        return $this->db->getRows($sql, $params);
-    }
-
-    /**
-     * Get download count with optional filtering
-     */
-    public function getDownloadsCount($filters = [])
-    {
-        $sql = "SELECT COUNT(*) FROM downloads d
-                INNER JOIN books b ON d.book_id = b.book_id
-                INNER JOIN users u ON d.user_id = u.user_id";
-
-        $params = [];
-        $whereClauses = [];
-
-        // Add filters
-        if (!empty($filters)) {
-            // Filter by book
-            if (isset($filters['book_id'])) {
-                $whereClauses[] = "d.book_id = :book_id";
-                $params['book_id'] = $filters['book_id'];
-            }
-
-            // Filter by user
-            if (isset($filters['user_id'])) {
-                $whereClauses[] = "d.user_id = :user_id";
-                $params['user_id'] = $filters['user_id'];
-            }
-
-            // Filter by date range
-            if (isset($filters['date_from'])) {
-                $whereClauses[] = "DATE(d.downloaded_at) >= :date_from";
-                $params['date_from'] = $filters['date_from'];
-            }
-
-            if (isset($filters['date_to'])) {
-                $whereClauses[] = "DATE(d.downloaded_at) <= :date_to";
-                $params['date_to'] = $filters['date_to'];
-            }
-        }
-
-        if (!empty($whereClauses)) {
-            $sql .= " WHERE " . implode(" AND ", $whereClauses);
-        }
-
-        return $this->db->getValue($sql, $params);
-    }
-
-    /**
-     * Get downloads for a specific user
-     */
-    public function getUserDownloads($userId, $page = 1, $perPage = 10)
-    {
-        $sql = "SELECT d.*, b.title, b.author, b.book_id
-                FROM downloads d
-                INNER JOIN books b ON d.book_id = b.book_id
-                WHERE d.user_id = :user_id AND b.status = 'approved'
-                ORDER BY d.downloaded_at DESC
-                LIMIT " . (int)(($page - 1) * $perPage) . ", " . (int)$perPage;
-
-        return $this->db->getRows($sql, [
-            'user_id' => $userId
-        ]);
-    }
-
-    /**
-     * Get download history for admin
-     */
-    public function getDownloadHistory($page = 1, $perPage = 10)
-    {
-        $offset = ($page - 1) * $perPage;
-
-        $sql = "SELECT d.*, b.title, b.author, u.display_name as user_name, u.email
-                FROM downloads d
-                INNER JOIN books b ON d.book_id = b.book_id
-                INNER JOIN users u ON d.user_id = u.user_id
-                ORDER BY d.downloaded_at DESC
-                LIMIT " . (int)$offset . ", " . (int)$perPage;
-
-        return $this->db->getRows($sql, []);
-    }
-
-    /**
-     * Get download history count for admin
-     */
-    public function getDownloadHistoryCount()
-    {
-        $sql = "SELECT COUNT(*) FROM downloads d
-                INNER JOIN books b ON d.book_id = b.book_id
-                INNER JOIN users u ON d.user_id = u.user_id";
-
-        return $this->db->getValue($sql);
-    }
-
-    /**
-     * Get page count from PDF file
-     * Note: This is a simplified implementation and may need adjustment
-     */
-    private function getPageCount($filePath)
-    {
-        // Method 1: Using Imagick if available
-        if (extension_loaded('imagick') && class_exists('\\Imagick')) {
-            try {
-                $imagickClass = '\\Imagick';
-                $im = new $imagickClass($filePath);
-                $pageCount = $im->getNumberImages();
-                $im->clear();
-                return $pageCount;
-            } catch (Exception $e) {
-                // Fall back to method 2
-            }
-        }
-
-        // Method 2: Using pdfinfo command if available
-        $command = "pdfinfo " . escapeshellarg($filePath) . " | grep Pages | awk '{print $2}'";
-        $output = [];
-        $returnVar = 0;
-        exec($command, $output, $returnVar);
-
-        if ($returnVar === 0 && !empty($output[0]) && is_numeric($output[0])) {
-            return (int)$output[0];
-        }
-
-        // Method 3: Using PHP to parse PDF (simplified)
-        $content = file_get_contents($filePath);
-        preg_match_all("/\/Page\W/", $content, $matches);
-        $pageCount = count($matches[0]);
-
-        return $pageCount > 0 ? $pageCount : null;
-    }
-    /**
-     * Upload file to ImageKit.io (unified method for all file types)
+     * Upload file to ImageKit
      */
     private function uploadToImageKit($filePath, $filename)
     {
@@ -1030,75 +616,288 @@ class Book
     }
 
     /**
-     * Delete file from ImageKit.io
-     */
-    private function deleteFromImageKit($filePath)
-    {
-        require_once __DIR__ . '/imagekit.php';
-
-        try {
-            // Extract the file ID from the path
-            $parts = explode('|', $filePath);
-            $fileId = $parts[1] ?? null;
-
-            if (!$fileId) {
-                return false;
-            }
-
-            // Create ImageKit helper
-            $imageKit = new ImageKitHelper();
-
-            // Delete file
-            return $imageKit->deleteFile($fileId);
-        } catch (Exception $e) {
-            // Log error
-            error_log('ImageKit delete error: ' . $e->getMessage());
-            return false;
-        }
-    }
-    /**
-     * Get download URL from ImageKit.io
+     * Get ImageKit download URL from stored file path
      */
     private function getImageKitDownloadUrl($filePath)
     {
-        require_once __DIR__ . '/imagekit.php';
-
         try {
+            // Check if it's an ImageKit path (should contain |)
+            if (strpos($filePath, '|') === false) {
+                // Old format or direct path - try to serve locally if file exists
+                $localPath = __DIR__ . '/../uploads/' . basename($filePath);
+                if (file_exists($localPath)) {
+                    return $localPath;
+                }
+                throw new Exception('File path format is invalid and local file not found');
+            }
+
             // Extract the file ID from the stored value
             $parts = explode('|', $filePath);
+            $actualPath = $parts[0] ?? null;
             $fileId = $parts[1] ?? null;
 
-            if (!$fileId) {
-                return null;
+            if (!$fileId || !$actualPath) {
+                throw new Exception('Invalid file path format: ' . $filePath);
+            }
+
+            // Check if ImageKit is configured and cURL is available
+            require_once __DIR__ . '/imagekit.php';
+
+            if (!ImageKitHelper::isConfigured()) {
+                throw new Exception('ImageKit is not configured');
+            }
+
+            if (!function_exists('curl_init')) {
+                throw new Exception('cURL is not available');
             }
 
             // Create ImageKit helper
             $imageKit = new ImageKitHelper();
 
-            // Get file details to retrieve the actual filename/path
-            $fileDetails = $imageKit->getFileDetails($fileId);
+            try {
+                // Get file details to verify the file exists
+                $fileDetails = $imageKit->getFileDetails($fileId);
 
-            if (!$fileDetails || !isset($fileDetails['filePath'])) {
-                error_log('ImageKit file details not found for fileId: ' . $fileId);
-                return null;
+                if (!$fileDetails || !isset($fileDetails['filePath'])) {
+                    throw new Exception('File not found in ImageKit: ' . $fileId);
+                }
+
+                // Use the actual ImageKit file path for URL generation
+                $downloadPath = $fileDetails['filePath'];
+
+                // Generate the download URL
+                $downloadUrl = $imageKit->getUrl($downloadPath);
+
+                // Add attachment parameter to force download instead of preview
+                if (strpos($downloadUrl, '?') !== false) {
+                    $downloadUrl .= '&ik-attachment=true';
+                } else {
+                    $downloadUrl .= '?ik-attachment=true';
+                }
+
+                return $downloadUrl;
+            } catch (Exception $imageKitError) {
+                // If ImageKit API fails, try direct URL construction
+                error_log('ImageKit API error, trying direct URL: ' . $imageKitError->getMessage());
+
+                // Construct direct ImageKit URL
+                $directUrl = defined('IMAGEKIT_ENDPOINT') ? IMAGEKIT_ENDPOINT . '/' . $actualPath : null;
+                if ($directUrl) {
+                    return $directUrl . '?ik-attachment=true';
+                }
+
+                throw $imageKitError;
+            }
+        } catch (Exception $e) {
+            // Log error and try local fallback
+            error_log('ImageKit URL generation error: ' . $e->getMessage());
+
+            // Try to find the file locally as fallback
+            if (strpos($filePath, '|') !== false) {
+                $parts = explode('|', $filePath);
+                $actualPath = $parts[0] ?? $filePath;
+                $fileName = basename($actualPath);
+            } else {
+                $fileName = basename($filePath);
             }
 
-            // Use the actual ImageKit file path for URL generation
-            $actualPath = $fileDetails['filePath'];
+            $localPath = __DIR__ . '/../uploads/' . $fileName;
 
-            // Get download URL using actual path
-            return $imageKit->getUrl($actualPath);
-        } catch (Exception $e) {
-            // Log error and return a local URL as fallback
-            error_log('ImageKit URL generation error: ' . $e->getMessage());
-            return SITE_URL . '/download.php?path=' . urlencode($filePath);
+            if (file_exists($localPath)) {
+                return $localPath;
+            }
+
+            // If no local file found, throw the original error
+            throw new Exception('Download URL generation failed: ' . $e->getMessage());
         }
     }
 
     /**
-     * Get cover image URL from ImageKit.io with optimization
+     * Delete file from ImageKit
      */
-    public function getCoverImageUrl($coverPath, $width = null, $height = null)
+    private function deleteFromImageKit($filePath)
+    {
+        if (empty($filePath)) {
+            return true; // No file path provided, consider it successful
+        }
+
+        require_once __DIR__ . '/imagekit.php';
+
+        try {
+            // Check if it's an ImageKit file format (contains |)
+            if (strpos($filePath, '|') !== false) {
+                $parts = explode('|', $filePath);
+                $fileId = $parts[1] ?? null;
+
+                if ($fileId) {
+                    $imageKit = new ImageKitHelper();
+                    $result = $imageKit->deleteFile($fileId);
+
+                    if ($result) {
+                        error_log("Successfully deleted file from ImageKit: " . $fileId);
+                        return true;
+                    } else {
+                        error_log("Failed to delete file from ImageKit: " . $fileId);
+                        return false;
+                    }
+                } else {
+                    error_log("Invalid ImageKit file format - no file ID found: " . $filePath);
+                    return false;
+                }
+            } else {
+                // For legacy files without file ID, try to delete by file path
+                // This might not work with newer ImageKit versions, but we'll try
+                error_log("Legacy file path format detected, cannot delete from ImageKit: " . $filePath);
+                return false;
+            }
+        } catch (Exception $e) {
+            error_log('ImageKit deletion error for file ' . $filePath . ': ' . $e->getMessage());
+            // Don't throw exception for deletion errors to avoid blocking book deletion
+            return false;
+        }
+    }
+
+    /**
+     * Get page count of PDF (basic implementation)
+     */
+    private function getPageCount($filePath)
+    {
+        try {
+            // Try to count pages using basic file reading
+            $content = file_get_contents($filePath);
+            if ($content !== false) {
+                $pageCount = preg_match_all('/\/Page\W/', $content);
+                return $pageCount > 0 ? $pageCount : null;
+            }
+        } catch (Exception $e) {
+            error_log('Page count error: ' . $e->getMessage());
+        }
+
+        return null; // Can't determine page count
+    }
+
+    /**
+     * Debug download issues - for admin use
+     */
+    public function debugDownload($bookId)
+    {
+        if (!$this->auth->isAdmin()) {
+            throw new Exception("Access denied");
+        }
+
+        $book = $this->getBook($bookId);
+        if (!$book) {
+            return ['error' => 'Book not found'];
+        }
+
+        $debug = [
+            'book_id' => $bookId,
+            'title' => $book['title'],
+            'file_path' => $book['file_path'],
+            'status' => $book['status'],
+            'file_path_format' => 'unknown'
+        ];
+
+        // Check file path format
+        if (strpos($book['file_path'], '|') !== false) {
+            $parts = explode('|', $book['file_path']);
+            $debug['file_path_format'] = 'imagekit';
+            $debug['actual_path'] = $parts[0] ?? 'missing';
+            $debug['file_id'] = $parts[1] ?? 'missing';
+        } else {
+            $debug['file_path_format'] = 'legacy_or_local';
+            $localPath = __DIR__ . '/../uploads/' . basename($book['file_path']);
+            $debug['local_file_exists'] = file_exists($localPath);
+            $debug['local_path'] = $localPath;
+        }
+
+        // Check ImageKit configuration
+        require_once __DIR__ . '/imagekit.php';
+        $debug['imagekit_configured'] = ImageKitHelper::isConfigured();
+
+        return $debug;
+    }
+
+    /**
+     * Get download URL for a book
+     */
+    public function getDownloadUrl($bookId)
+    {
+        // Record download and get file path
+        $filePath = $this->recordDownload($bookId);
+
+        if (empty($filePath)) {
+            throw new Exception("File path is empty for book ID: " . $bookId);
+        }
+
+        // Always return the local download.php URL with proper filename handling
+        // This ensures consistent filename formatting regardless of storage method
+        return SITE_URL . '/download.php?id=' . $bookId;
+    }
+
+    /**
+     * Get book categories for a specific book
+     */
+    public function getBookCategories($bookId)
+    {
+        $sql = "SELECT c.* FROM categories c 
+                INNER JOIN books b ON c.category_id = b.category_id 
+                WHERE b.book_id = :book_id";
+        return $this->db->getRows($sql, ['book_id' => $bookId]);
+    }
+
+    /**
+     * Check if a book is favorited by a user
+     */
+    public function isFavorite($bookId, $userId)
+    {
+        if (!$userId) return false;
+
+        $sql = "SELECT 1 FROM favorites WHERE book_id = :book_id AND user_id = :user_id";
+        $result = $this->db->getRow($sql, ['book_id' => $bookId, 'user_id' => $userId]);
+        return !empty($result);
+    }
+
+    /**
+     * Toggle favorite status for a book
+     */
+    public function toggleFavorite($bookId)
+    {
+        // Check if user is logged in
+        if (!$this->auth->isLoggedIn()) {
+            throw new Exception("You must be logged in to favorite books");
+        }
+
+        // Check if book exists
+        $book = $this->getBook($bookId);
+        if (!$book) {
+            throw new Exception("Book not found");
+        }
+
+        // Get user ID
+        $userId = $this->auth->getUserId();
+
+        // Check if already favorited
+        if ($this->isFavorite($bookId, $userId)) {
+            // Remove from favorites
+            $this->db->query(
+                "DELETE FROM favorites WHERE book_id = :book_id AND user_id = :user_id",
+                ['book_id' => $bookId, 'user_id' => $userId]
+            );
+        } else {
+            // Add to favorites
+            $this->db->insert('favorites', [
+                'book_id' => $bookId,
+                'user_id' => $userId,
+                'created_at' => date('Y-m-d H:i:s')
+            ]);
+        }
+    }
+
+    /**
+     * Get display cover URL for a book cover with resizing
+     */
+    public function getDisplayCoverUrl($coverPath, $width = null, $height = null)
     {
         if (empty($coverPath)) {
             return null;
@@ -1111,106 +910,182 @@ class Book
             try {
                 // Extract the stored path and file ID
                 $parts = explode('|', $coverPath);
-                $storedPath = $parts[0] ?? null;
+                $actualPath = $parts[0] ?? null;
                 $fileId = $parts[1] ?? null;
 
-                if (!$fileId) {
-                    error_log('ImageKit: No fileId found in cover path: ' . $coverPath);
+                if (!$fileId || !$actualPath) {
                     return null;
                 }
 
                 // Create ImageKit helper
                 $imageKit = new ImageKitHelper();
 
-                // First try to use the stored path directly
-                if ($storedPath) {
-                    try {
-                        $url = $imageKit->getOptimizedImageUrl($storedPath, $width, $height, 85, 'auto');
-                        error_log('ImageKit: Successfully generated URL from stored path: ' . $url);
-                        return $url;
-                    } catch (Exception $e) {
-                        error_log('ImageKit stored path failed for path: ' . $storedPath . ' - ' . $e->getMessage());
-                        // Continue to fallback method
-                    }
-                }
+                // Get optimized image URL with dimensions
+                $transformations = [];
+                if ($width) $transformations['w'] = $width;
+                if ($height) $transformations['h'] = $height;
+                $transformations['q'] = 'auto';
+                $transformations['f'] = 'auto';
 
-                // Fallback: Get file details to retrieve the actual filename/path
-                error_log('ImageKit: Trying fallback method with fileId: ' . $fileId);
-                $fileDetails = $imageKit->getFileDetails($fileId);
-
-                if (!$fileDetails || !isset($fileDetails['filePath'])) {
-                    error_log('ImageKit file details not found for fileId: ' . $fileId);
-                    return null;
-                }
-
-                // Use the actual ImageKit file path for URL generation
-                $actualPath = $fileDetails['filePath'];
-                error_log('ImageKit: Retrieved actual path from API: ' . $actualPath);
-
-                // Get optimized image URL using actual path
-                $url = $imageKit->getOptimizedImageUrl($actualPath, $width, $height, 85, 'auto');
-                error_log('ImageKit: Successfully generated URL from actual path: ' . $url);
-                return $url;
+                return $imageKit->getUrl($actualPath, $transformations);
             } catch (Exception $e) {
-                // Log error and return null (no local fallback)
-                error_log('ImageKit cover URL generation error: ' . $e->getMessage());
+                error_log('Cover image URL generation error: ' . $e->getMessage());
                 return null;
             }
+        } else {
+            // Legacy path - return as is or check if local file exists
+            $localPath = __DIR__ . '/../uploads/' . basename($coverPath);
+            if (file_exists($localPath)) {
+                return SITE_URL . '/uploads/' . basename($coverPath);
+            }
+            return null;
         }
-
-        // If no ImageKit path separator found, treat as legacy local path
-        // This is for backward compatibility with existing data only
-        return null;
     }
 
     /**
-     * Enhanced cover image URL helper
+     * Get file view URL for PDF viewer
      */
-    public function getDisplayCoverUrl($coverPath, $width = 300, $height = 400)
+    public function getFileViewUrl($filePath)
     {
-        if (empty($coverPath)) {
+        try {
+            // Check if it's an ImageKit path (contains |)
+            if (strpos($filePath, '|') !== false) {
+                $parts = explode('|', $filePath);
+                $actualPath = $parts[0] ?? null;
+                $fileId = $parts[1] ?? null;
+
+                if (!$fileId || !$actualPath) {
+                    return null;
+                }
+
+                // Try ImageKit first if available
+                if (function_exists('curl_init') && defined('IMAGEKIT_ENDPOINT')) {
+                    try {
+                        require_once __DIR__ . '/imagekit.php';
+                        $imageKit = new ImageKitHelper();
+
+                        // Generate the view URL (no attachment parameter for viewing)
+                        return $imageKit->getUrl($actualPath);
+                    } catch (Exception $imageKitError) {
+                        error_log('ImageKit view URL error: ' . $imageKitError->getMessage());
+
+                        // Fall back to direct URL
+                        return IMAGEKIT_ENDPOINT . '/' . $actualPath;
+                    }
+                } else {
+                    // Direct ImageKit URL if cURL not available
+                    return defined('IMAGEKIT_ENDPOINT') ? IMAGEKIT_ENDPOINT . '/' . $actualPath : null;
+                }
+            } else {
+                // Legacy path - check if local file exists
+                $localPath = __DIR__ . '/../uploads/' . basename($filePath);
+                if (file_exists($localPath)) {
+                    return SITE_URL . '/uploads/' . basename($filePath);
+                }
+                return null;
+            }
+        } catch (Exception $e) {
+            error_log('File view URL generation error: ' . $e->getMessage());
+
+            // Try to find the file locally as fallback
+            if (strpos($filePath, '|') !== false) {
+                $parts = explode('|', $filePath);
+                $actualPath = $parts[0] ?? $filePath;
+                $fileName = basename($actualPath);
+            } else {
+                $fileName = basename($filePath);
+            }
+
+            $localPath = __DIR__ . '/../uploads/' . $fileName;
+
+            if (file_exists($localPath)) {
+                return SITE_URL . '/uploads/' . $fileName;
+            }
+
             return null;
         }
+    }
+
+    /**
+     * Check system requirements
+     */
+    public function checkSystemRequirements()
+    {
+        $requirements = [
+            'curl' => function_exists('curl_init'),
+            'json' => function_exists('json_encode'),
+            'file_get_contents' => function_exists('file_get_contents'),
+            'imagekit_config' => defined('IMAGEKIT_PUBLIC_KEY') && defined('IMAGEKIT_PRIVATE_KEY') && defined('IMAGEKIT_ENDPOINT')
+        ];
+
+        return $requirements;
+    }
+
+    /**
+     * Alternative download method that bypasses ImageKit API calls
+     */
+    public function getDirectDownloadUrl($bookId)
+    {
+        // Check if book exists
+        $book = $this->getBook($bookId);
+        if (!$book) {
+            throw new Exception("Book not found with ID: " . $bookId);
+        }
+
+        $filePath = $book['file_path'];
 
         // Check if it's an ImageKit path (contains |)
-        if (strpos($coverPath, '|') !== false) {
-            // Try ImageKit first
-            $imageKitUrl = $this->getCoverImageUrl($coverPath, $width, $height);
-            if ($imageKitUrl) {
-                return $imageKitUrl;
-            }
+        if (strpos($filePath, '|') !== false) {
+            $parts = explode('|', $filePath);
+            $actualPath = $parts[0] ?? null;
 
-            // If ImageKit fails, we don't have local fallback for new uploads
-            return null;
-        } else {
-            // Regular path handling (legacy local files)
-            if (strpos($coverPath, 'http') === 0) {
-                // Already a full URL
-                return $coverPath;
-            } else {
-                // Local path
-                $fullPath = $coverPath;
-
-                // Add leading slash if missing
-                if ($fullPath[0] !== '/') {
-                    $fullPath = '/' . $fullPath;
-                }
-
-                // Check if file exists
-                $localFilePath = $_SERVER['DOCUMENT_ROOT'] . $fullPath;
-                if (file_exists($localFilePath)) {
-                    return SITE_URL . $fullPath;
-                }
-
-                // Try with uploads prefix
-                $uploadsPath = '/uploads/' . $coverPath;
-                $uploadsFilePath = $_SERVER['DOCUMENT_ROOT'] . $uploadsPath;
-                if (file_exists($uploadsFilePath)) {
-                    return SITE_URL . $uploadsPath;
-                }
+            if ($actualPath && defined('IMAGEKIT_ENDPOINT')) {
+                // Return direct ImageKit URL without API verification
+                return IMAGEKIT_ENDPOINT . '/' . $actualPath . '?ik-attachment=true';
             }
         }
 
-        return null; // No valid image found
+        // Try local file
+        $fileName = basename($filePath);
+        $localPath = __DIR__ . '/../uploads/' . $fileName;
+
+        if (file_exists($localPath)) {
+            return $localPath;
+        }
+
+        throw new Exception('File not found: ' . $filePath);
+    }
+
+    /**
+     * Get the actual file URL for internal use (by download.php)
+     */
+    public function getActualFileUrl($bookId)
+    {
+        $book = $this->getBook($bookId);
+        if (!$book) {
+            throw new Exception("Book not found with ID: " . $bookId);
+        }
+
+        $filePath = $book['file_path'];
+
+        try {
+            // Try ImageKit first
+            $downloadUrl = $this->getImageKitDownloadUrl($filePath);
+            if ($downloadUrl) {
+                return $downloadUrl;
+            }
+        } catch (Exception $imageKitError) {
+            error_log("ImageKit download URL failed: " . $imageKitError->getMessage());
+
+            // Try direct download as fallback
+            try {
+                return $this->getDirectDownloadUrl($bookId);
+            } catch (Exception $directError) {
+                error_log("Direct download also failed: " . $directError->getMessage());
+                throw new Exception("All download methods failed: " . $imageKitError->getMessage());
+            }
+        }
+
+        throw new Exception("Unable to generate download URL for file: " . $filePath);
     }
 }

@@ -61,14 +61,25 @@ class ImageKitHelper
         }
 
         // Prepare the cURL request
+        if (!function_exists('curl_init')) {
+            throw new Exception('cURL is not available. Please enable cURL extension.');
+        }
+
         $ch = curl_init();
+
+        if ($ch === false) {
+            throw new Exception('Failed to initialize cURL');
+        }
+
         curl_setopt($ch, CURLOPT_URL, 'https://upload.imagekit.io/api/v1/files/upload');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60); // Longer timeout for uploads
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Basic ' . base64_encode($this->privateKey . ':')
         ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
 
         // Execute the request
         $response = curl_exec($ch);
@@ -138,27 +149,50 @@ class ImageKitHelper
      */
     public function getFileDetails($fileId)
     {
+        // Check if curl is available
+        if (!function_exists('curl_init')) {
+            throw new Exception('cURL is not available. Please enable cURL extension.');
+        }
+
         // Prepare the cURL request
         $ch = curl_init();
+
+        if ($ch === false) {
+            throw new Exception('Failed to initialize cURL');
+        }
+
         curl_setopt($ch, CURLOPT_URL, 'https://api.imagekit.io/v1/files/' . $fileId);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Basic ' . base64_encode($this->privateKey . ':')
         ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
 
         // Execute the request
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+
+        // Check for cURL errors
+        if ($response === false || !empty($curlError)) {
+            throw new Exception('cURL error: ' . $curlError);
+        }
 
         // Check if the request was successful
         if ($httpCode != 200) {
-            error_log('ImageKit file details error: ' . $response);
-            throw new Exception('Failed to get file details from ImageKit: ' . $response);
+            error_log('ImageKit file details error: HTTP ' . $httpCode . ' - ' . $response);
+            throw new Exception('Failed to get file details from ImageKit: HTTP ' . $httpCode);
         }
 
         // Decode the response
-        return json_decode($response, true);
+        $decoded = json_decode($response, true);
+        if ($decoded === null) {
+            throw new Exception('Invalid JSON response from ImageKit');
+        }
+
+        return $decoded;
     }
     /**
      * Generate URL with transformations for a file

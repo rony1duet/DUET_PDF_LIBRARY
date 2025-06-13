@@ -19,7 +19,7 @@ $bookObj = new Book();
 $categoryObj = new Category();
 
 // Check if book ID is provided
-if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+if (!isset($_GET['id']) || empty($_GET['id']) || !is_numeric($_GET['id']) || $_GET['id'] <= 0) {
     $_SESSION['flash_message'] = 'Invalid book ID';
     $_SESSION['flash_type'] = 'danger';
     header('Location: index.php');
@@ -47,9 +47,6 @@ if ($book['status'] !== 'approved' && !$auth->isAdmin()) {
     exit;
 }
 
-// Get book categories
-$bookCategories = $bookObj->getBookCategories($bookId);
-
 // Get download count for this book
 $downloadCountQuery = "SELECT COUNT(*) as count FROM downloads WHERE book_id = ?";
 $stmt = $db->getConnection()->prepare($downloadCountQuery);
@@ -64,10 +61,17 @@ if ($auth->isLoggedIn()) {
 
 // Handle favorite toggle
 if (isset($_POST['toggle_favorite']) && $auth->isLoggedIn()) {
-    $bookObj->toggleFavorite($bookId);
-    // Redirect to avoid form resubmission
-    header('Location: view.php?id=' . $bookId);
-    exit;
+    try {
+        $bookObj->toggleFavorite($bookId);
+        // Redirect to avoid form resubmission
+        header('Location: view.php?id=' . $bookId);
+        exit;
+    } catch (Exception $e) {
+        $_SESSION['flash_message'] = 'Failed to update favorite: ' . $e->getMessage();
+        $_SESSION['flash_type'] = 'error';
+        header('Location: view.php?id=' . $bookId);
+        exit;
+    }
 }
 
 // Handle download request
@@ -82,21 +86,40 @@ if (isset($_GET['download']) && $_GET['download'] === 'true') {
         exit;
     }
 
-    // Record download
-    $bookObj->recordDownload($bookId, $auth->getUserId());
+    try {
+        // Get download URL (this will also record the download)
+        $downloadUrl = $bookObj->getDownloadUrl($bookId);
 
-    // Get download URL
-    $downloadUrl = $bookObj->getDownloadUrl($book['file_path']);
+        if ($downloadUrl) {
+            // Redirect to download URL
+            header('Location: ' . $downloadUrl);
+            exit;
+        } else {
+            $_SESSION['flash_message'] = 'Unable to generate download link. Please try again later.';
+            $_SESSION['flash_type'] = 'error';
+            header('Location: view.php?id=' . $bookId);
+            exit;
+        }
+    } catch (Exception $e) {
+        // Log detailed error for debugging
+        error_log("View.php download error for book ID $bookId: " . $e->getMessage());
 
-    // Redirect to download URL
-    header('Location: ' . $downloadUrl);
-    exit;
+        $_SESSION['flash_message'] = 'Download failed: ' . $e->getMessage();
+        $_SESSION['flash_type'] = 'error';
+        header('Location: view.php?id=' . $bookId);
+        exit;
+    }
 }
 
 // Record view (only if not bot and not admin viewing)
 if (!$auth->isAdmin() && !isset($_SESSION['viewed_book_' . $bookId])) {
-    $bookObj->recordView($bookId, $auth->getUserId());
-    $_SESSION['viewed_book_' . $bookId] = true;
+    try {
+        $bookObj->recordView($bookId, $auth->getUserId());
+        $_SESSION['viewed_book_' . $bookId] = true;
+    } catch (Exception $e) {
+        // Log the error but don't break the page
+        error_log("Failed to record view for book ID $bookId: " . $e->getMessage());
+    }
 }
 
 // Get related books (same category)
@@ -580,18 +603,14 @@ include 'includes/header.php';
                             <?php echo nl2br(htmlspecialchars($book['description'])); ?>
                         </div>
                     </div>
-                <?php endif; ?>
-
-                <?php if (!empty($bookCategories)): ?>
+                <?php endif; ?> <?php if (!empty($book['category_name'])): ?>
                     <div class="detail-section">
-                        <div class="detail-title">Categories</div>
+                        <div class="detail-title">Category</div>
                         <div class="detail-content">
                             <div class="categories-list">
-                                <?php foreach ($bookCategories as $category): ?>
-                                    <a href="index.php?category=<?php echo $category['id']; ?>" class="category-badge">
-                                        <?php echo htmlspecialchars($category['name']); ?>
-                                    </a>
-                                <?php endforeach; ?>
+                                <a href="index.php?category=<?php echo $book['category_id']; ?>" class="category-badge">
+                                    <?php echo htmlspecialchars($book['category_name']); ?>
+                                </a>
                             </div>
                         </div>
                     </div>
