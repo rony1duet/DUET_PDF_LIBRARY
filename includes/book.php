@@ -135,13 +135,6 @@ class Book
             'pages' => ceil($totalCount / $perPage),
             'current_page' => $page
         ];
-
-        return [
-            'books' => $books,
-            'total' => $totalCount,
-            'pages' => ceil($totalCount / $perPage),
-            'current_page' => $page
-        ];
     }
 
     /**
@@ -167,6 +160,35 @@ class Book
         }
 
         return $this->db->getRow($sql, ['book_id' => $bookId]);
+    }
+
+    /**
+     * Get related books by category (simple version)
+     */
+    public function getRelatedBooks($categoryId, $excludeBookId = null, $limit = 4)
+    {
+        $sql = "SELECT b.*, c.name as category_name, u.display_name as uploader_name,
+                       COALESCE(dc.download_count, 0) as download_count
+               FROM books b 
+               LEFT JOIN categories c ON b.category_id = c.category_id 
+               LEFT JOIN users u ON b.uploaded_by = u.user_id
+               LEFT JOIN (
+                   SELECT book_id, COUNT(*) as download_count 
+                   FROM downloads 
+                   GROUP BY book_id
+               ) dc ON b.book_id = dc.book_id
+               WHERE b.category_id = :category_id AND b.status = 'approved'";
+
+        $params = ['category_id' => $categoryId];
+
+        if ($excludeBookId) {
+            $sql .= " AND b.book_id != :exclude_book_id";
+            $params['exclude_book_id'] = $excludeBookId;
+        }
+
+        $sql .= " ORDER BY b.created_at DESC LIMIT " . intval($limit);
+
+        return $this->db->getRows($sql, $params);
     }
 
     /**
@@ -438,6 +460,77 @@ class Book
     }
 
     /**
+     * Record a book view
+     */
+    public function recordView($bookId, $userId = null)
+    {
+        // Check if book exists
+        $book = $this->getBook($bookId);
+        if (!$book) {
+            return false;
+        }
+
+        // Get user ID if provided
+        $viewUserId = $userId ?: ($this->auth->isLoggedIn() ? $this->auth->getUserId() : null);
+
+        try {
+            // Check if views table exists, if not create it
+            $this->ensureViewsTableExists();
+
+            // Check if already viewed today (to prevent spam)
+            $today = date('Y-m-d');
+            $checkSql = "SELECT * FROM book_views WHERE book_id = :book_id AND DATE(viewed_at) = :today";
+            $params = ['book_id' => $bookId, 'today' => $today];
+
+            if ($viewUserId) {
+                $checkSql .= " AND user_id = :user_id";
+                $params['user_id'] = $viewUserId;
+            } else {
+                $checkSql .= " AND ip_address = :ip_address";
+                $params['ip_address'] = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            }
+
+            $existing = $this->db->getRow($checkSql, $params);
+
+            if (!$existing) {
+                // Record view
+                $this->db->insert('book_views', [
+                    'user_id' => $viewUserId,
+                    'book_id' => $bookId,
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'viewed_at' => date('Y-m-d H:i:s')
+                ]);
+            }
+
+            return true;
+        } catch (Exception $e) {
+            error_log("Error recording book view: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Ensure book_views table exists
+     */
+    private function ensureViewsTableExists()
+    {
+        $sql = "CREATE TABLE IF NOT EXISTS book_views (
+            view_id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NULL,
+            book_id INT NOT NULL,
+            ip_address VARCHAR(45),
+            viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+            FOREIGN KEY (book_id) REFERENCES books(book_id) ON DELETE CASCADE,
+            INDEX idx_book_views_book_id (book_id),
+            INDEX idx_book_views_user_id (user_id),
+            INDEX idx_book_views_date (viewed_at)
+        )";
+
+        $this->db->getConnection()->exec($sql);
+    }
+
+    /**
      * Get download URL for a book
      */
     public function getDownloadUrl($bookId)
@@ -640,6 +733,87 @@ class Book
         }
 
         return SITE_URL . '/viewer.php?id=' . $bookId;
+    }
+
+    /**
+     * Get view URL from file path for PDF viewer
+     */
+    public function getFileViewUrl($filePath)
+    {
+        if (empty($filePath)) {
+            return null;
+        }
+
+        // Extract just the file path part (before the pipe if it exists)
+        $parts = explode('|', $filePath);
+        $actualPath = $parts[0];
+
+        // Check if ImageKit is configured
+        require_once __DIR__ . '/imagekit.php';
+        if (!ImageKitHelper::isConfigured()) {
+            // Use direct endpoint URL if ImageKit not configured
+            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+        }
+
+        try {
+            // Try to get ImageKit URL
+            $url = $this->getImageKitViewUrl($filePath);
+
+            if ($url) {
+                return $url;
+            }
+
+            // Fallback: construct direct URL using actual path
+            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+        } catch (Exception $e) {
+            // Log error and use fallback
+            error_log("Error getting file view URL: " . $e->getMessage());
+            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+        }
+    }
+
+    /**
+     * Get ImageKit view URL for PDF files
+     */
+    private function getImageKitViewUrl($filePath)
+    {
+        require_once __DIR__ . '/imagekit.php';
+
+        try {
+            // Extract the file ID from the stored value
+            $parts = explode('|', $filePath);
+            $actualPath = $parts[0]; // The actual file path without the ID
+            $fileId = $parts[1] ?? null;
+
+            if (!$fileId) {
+                // If no file ID, use the path directly
+                return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+            }
+
+            // Create ImageKit helper
+            $imageKit = new ImageKitHelper();
+
+            // Get file details to retrieve the actual filename/path
+            $fileDetails = $imageKit->getFileDetails($fileId);
+
+            if (!$fileDetails || !isset($fileDetails['filePath'])) {
+                error_log('ImageKit file details not found for fileId: ' . $fileId);
+                // Fallback to the actual path (first part before pipe)
+                return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+            }
+
+            // Use the actual ImageKit file path for URL generation
+            $retrievedPath = $fileDetails['filePath'];
+
+            // Get view URL using actual path
+            return $imageKit->getUrl($retrievedPath);
+        } catch (Exception $e) {
+            error_log("ImageKit view URL error: " . $e->getMessage());
+            // Fallback to direct endpoint URL using just the path part
+            $parts = explode('|', $filePath);
+            $actualPath = $parts[0];
+            return IMAGEKIT_ENDPOINT . '/' . ltrim($actualPath, '/');
+        }
     }
 
     /**

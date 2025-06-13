@@ -224,7 +224,7 @@ class ImageKitHelper
     }
 
     /**
-     * Check if ImageKit is properly configured
+     * Check if ImageKit is configured properly
      */
     public static function isConfigured()
     {
