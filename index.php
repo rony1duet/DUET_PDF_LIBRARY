@@ -61,21 +61,15 @@ include 'includes/header.php';
                         <p class="lead mb-4 animate__animated animate__fadeInUp animate__delay-1s">
                             Discover a world of knowledge with thousands of academic resources, textbooks,
                             and research materials. Your gateway to educational excellence starts here.
-                        </p>
-
-                        <!-- Statistics -->
+                        </p> <!-- Statistics -->
                         <div class="row g-4 mb-4">
                             <div class="col-6 col-md-4 text-center">
-                                <div class="stat-card">
-                                    <h3 class="fw-bold mb-1 counter" data-target="<?php echo $totalBooks; ?>">0</h3>
-                                    <small class="opacity-75 d-block">Books Available</small>
-                                </div>
+                                <h3 class="fw-bold mb-1 counter" data-target="<?php echo $totalBooks; ?>">0</h3>
+                                <small class="opacity-75 d-block">Books Available</small>
                             </div>
                             <div class="col-6 col-md-4 text-center">
-                                <div class="stat-card">
-                                    <h3 class="fw-bold mb-1 counter" data-target="<?php echo count($categories); ?>">0</h3>
-                                    <small class="opacity-75 d-block">Categories</small>
-                                </div>
+                                <h3 class="fw-bold mb-1 counter" data-target="<?php echo count($categories); ?>">0</h3>
+                                <small class="opacity-75 d-block">Categories</small>
                             </div>
                         </div>
                     </div>

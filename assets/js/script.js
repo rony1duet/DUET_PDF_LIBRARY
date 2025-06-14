@@ -1,134 +1,291 @@
 /**
- * DUET PDF Library - Consolidated JavaScript
- * All functionality combined in a single optimized file
+ * DUET PDF Library - Optimized JavaScript
+ * Modular, efficient, and maintainable code
  */
 
-document.addEventListener("DOMContentLoaded", function () {
-  // Initialize all components
-  initializeFlashMessages();
-  initializeNavigation();
-  initializeSearch();
-  initializeAnimations();
-  initializeScrollEffects();
-  initializeFormHandlers();
-  initializeTooltips();
-  initializePagination();
-  initializeFavorites();
-  initializeImageLoading();
-  initializeMobileEnhancements();
-  initializeUploadProgress();
-  initializeCategoryPage(); // Re-added category functionality
+// Constants and configuration
+const CONFIG = {
+  ANIMATION_DURATION: 300,
+  SEARCH_DELAY: 500,
+  TOAST_DURATION: 5000,
+  FLASH_MESSAGE_DELAY: 5000,
+  COUNTER_ANIMATION_DURATION: 2000,
+  STATS_REFRESH_INTERVAL: 300000,
+  TIMESTAMP_UPDATE_INTERVAL: 60000,
+  NOTIFICATION_CHECK_INTERVAL: 300000
+};
 
-  // Initialize admin dashboard if on admin page
-  if (document.querySelector('.admin-dashboard-card')) {
+// Cache DOM elements and selectors
+const SELECTORS = {
+  adminDashboard: '.admin-dashboard-card',
+  profilePage: '.profile-page',
+  bookDetailPage: '.book-detail-page',
+  categoryCard: '.category-card',
+  flashMessages: '.alert',
+  navbar: '.navbar',
+  searchInputs: 'input[name="search"]',
+  counters: '.counter',
+  bookImages: '.book-image, img[data-src]',
+  tooltips: '[data-bs-toggle="tooltip"]',
+  popovers: '[data-bs-toggle="popover"]'
+};
+
+// Utility functions
+const Utils = {
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  },
+
+  throttle(func, limit) {
+    let inThrottle;
+    return function () {
+      const args = arguments;
+      const context = this;
+      if (!inThrottle) {
+        func.apply(context, args);
+        inThrottle = true;
+        setTimeout(() => inThrottle = false, limit);
+      }
+    };
+  },
+
+  isElementInViewport(el) {
+    const rect = el.getBoundingClientRect();
+    return (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+  },
+  sanitizeInput(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+};
+
+// Enhanced button interactions
+function initializeButtonEnhancements() {
+  // Add ripple effect to outline buttons
+  const outlineButtons = document.querySelectorAll('[class*="btn-outline"]');
+
+  outlineButtons.forEach(button => {
+    button.addEventListener('click', function (e) {
+      // Create ripple effect
+      const ripple = document.createElement('span');
+      const rect = this.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      const x = e.clientX - rect.left - size / 2;
+      const y = e.clientY - rect.top - size / 2;
+
+      ripple.style.cssText = `
+        position: absolute;
+        border-radius: 50%;
+        transform: scale(0);
+        animation: ripple 0.6s linear;
+        background-color: currentColor;
+        opacity: 0.3;
+        width: ${size}px;
+        height: ${size}px;
+        left: ${x}px;
+        top: ${y}px;
+        pointer-events: none;
+      `;
+
+      // Ensure button has relative positioning
+      const originalPosition = getComputedStyle(this).position;
+      if (originalPosition === 'static') {
+        this.style.position = 'relative';
+      }
+
+      this.appendChild(ripple);
+
+      // Remove ripple after animation
+      setTimeout(() => {
+        ripple.remove();
+      }, 600);
+    });
+
+    // Add loading state functionality
+    if (button.closest('form')) {
+      const form = button.closest('form');
+      form.addEventListener('submit', function () {
+        if (button.type === 'submit') {
+          button.disabled = true;
+          const originalText = button.innerHTML;
+          button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing...';
+
+          // Re-enable after 3 seconds (fallback)
+          setTimeout(() => {
+            button.disabled = false;
+            button.innerHTML = originalText;
+          }, 3000);
+        }
+      });
+    }
+  });
+}
+
+// Main initialization
+document.addEventListener("DOMContentLoaded", function () {
+  // Core initialization with performance optimization
+  const initPromises = [
+    initializeFlashMessages(),
+    initializeNavigation(),
+    initializeSearch(),
+    initializeScrollEffects(),
+    initializeFormHandlers(),
+    initializeTooltips()
+  ];
+  // Initialize page-specific components
+  requestAnimationFrame(() => {
+    initializeAnimations();
+    initializePagination();
+    initializeFavorites();
+    initializeImageLoading();
+    initializeMobileEnhancements();
+    initializeUploadProgress();
+    initializeCategoryPage();
+    initializeButtonEnhancements(); // Add button enhancements
+  });
+
+  // Conditional initialization for specific pages
+  if (document.querySelector(SELECTORS.adminDashboard)) {
     initializeAdminDashboard();
   }
 
+  if (document.querySelector(SELECTORS.profilePage)) {
+    initializeProfilePage();
+  }
+
+  if (document.querySelector(SELECTORS.bookDetailPage)) {
+    initializeBookDetailPage();
+  }
+
+  // Wait for all core initializations
+  Promise.all(initPromises).then(() => {
+    console.log('DUET PDF Library initialized successfully');
+  }).catch(err => {
+    console.error('Initialization error:', err);
+  });
   // Auto-dismiss flash messages with enhanced animations
   function initializeFlashMessages() {
-    const flashMessages = document.querySelectorAll(".alert");
-    if (flashMessages.length > 0) {
-      setTimeout(function () {
-        flashMessages.forEach(function (message) {
-          if (message.classList.contains('alert-dismissible')) {
-            message.style.opacity = "0";
-            message.style.transform = "translateY(-20px)";
-            setTimeout(function () {
-              message.remove();
-            }, 300);
-          }
-        });
-      }, 5000);
-    }
-  }
-
-  // Enhanced navigation with smooth animations
-  function initializeNavigation() {
-    // Mobile menu functionality
-    const navbar = document.querySelector('.navbar');
-    const navbarToggler = document.querySelector('.navbar-toggler');
-    const navbarCollapse = document.querySelector('.navbar-collapse');
-
-    if (navbarToggler && navbarCollapse) {
-      navbarToggler.addEventListener('click', function () {
-        // Add smooth animation class
-        navbarCollapse.classList.add('collapsing');
-        setTimeout(() => {
-          navbarCollapse.classList.remove('collapsing');
-        }, 350);
-      });
-    }
-
-    // Navbar scroll effect
-    if (navbar) {
-      let lastScrollTop = 0;
-      window.addEventListener('scroll', function () {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-
-        if (scrollTop > 100) {
-          navbar.classList.add('navbar-scrolled');
-        } else {
-          navbar.classList.remove('navbar-scrolled');
-        }
-
-        // Hide/show navbar on scroll
-        if (scrollTop > lastScrollTop && scrollTop > 200) {
-          navbar.style.transform = 'translateY(-100%)';
-        } else {
-          navbar.style.transform = 'translateY(0)';
-        }
-        lastScrollTop = scrollTop;
-      });
-    }
-
-    // User dropdown animation
-    const userDropdown = document.querySelector('.dropdown-toggle');
-    if (userDropdown) {
-      userDropdown.addEventListener('shown.bs.dropdown', function () {
-        const menu = this.nextElementSibling;
-        if (menu) {
-          menu.style.animation = 'fadeInUp 0.3s ease-out';
-        }
-      });
-    }
-  }
-
-  // Enhanced search functionality
-  function initializeSearch() {
-    const searchInputs = document.querySelectorAll('input[name="search"]');
-    const searchForms = document.querySelectorAll('.search-form, form[action*="index.php"]');
-
-    searchInputs.forEach(input => {
-      let searchTimeout;
-
-      input.addEventListener('input', function () {
-        const value = this.value.trim();
-
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-          if (value.length >= 2) {
-            // Auto-submit for live search effect
-            const form = this.closest('form');
-            if (form && form.method.toLowerCase() === 'get') {
-              // Only submit if it's a GET form (search forms)
-              // form.submit();
-            }
-          }
-        }, 500);
-      });
-
-      // Add clear button functionality
-      if (input.value.trim()) {
-        addClearButton(input);
+    return new Promise((resolve) => {
+      const flashMessages = document.querySelectorAll(SELECTORS.flashMessages);
+      if (flashMessages.length === 0) {
+        resolve();
+        return;
       }
 
-      input.addEventListener('input', function () {
-        if (this.value.trim()) {
-          addClearButton(this);
-        } else {
-          removeClearButton(this);
+      setTimeout(() => {
+        flashMessages.forEach((message) => {
+          if (message.classList.contains('alert-dismissible')) {
+            message.style.transition = `opacity ${CONFIG.ANIMATION_DURATION}ms ease, transform ${CONFIG.ANIMATION_DURATION}ms ease`;
+            message.style.opacity = "0";
+            message.style.transform = "translateY(-20px)";
+            setTimeout(() => message.remove(), CONFIG.ANIMATION_DURATION);
+          }
+        });
+        resolve();
+      }, CONFIG.FLASH_MESSAGE_DELAY);
+    });
+  }
+
+  // Optimized navigation with efficient event handling
+  function initializeNavigation() {
+    return new Promise((resolve) => {
+      const navbar = document.querySelector(SELECTORS.navbar);
+      const navbarToggler = navbar?.querySelector('.navbar-toggler');
+      const navbarCollapse = navbar?.querySelector('.navbar-collapse');
+
+      if (navbarToggler && navbarCollapse) {
+        navbarToggler.addEventListener('click', () => {
+          navbarCollapse.classList.add('collapsing');
+          setTimeout(() => navbarCollapse.classList.remove('collapsing'), 350);
+        });
+      }
+
+      if (navbar) {
+        let lastScrollTop = 0;
+        const handleScroll = Utils.throttle(() => {
+          const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+          navbar.classList.toggle('navbar-scrolled', scrollTop > 100);
+
+          if (scrollTop > lastScrollTop && scrollTop > 200) {
+            navbar.style.transform = 'translateY(-100%)';
+          } else {
+            navbar.style.transform = 'translateY(0)';
+          }
+          lastScrollTop = scrollTop;
+        }, 16); // ~60fps
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+      }
+
+      // User dropdown animation
+      const userDropdown = document.querySelector('.dropdown-toggle');
+      if (userDropdown) {
+        userDropdown.addEventListener('shown.bs.dropdown', function () {
+          const menu = this.nextElementSibling;
+          if (menu) {
+            menu.style.animation = 'fadeInUp 0.3s ease-out';
+          }
+        });
+      }
+
+      resolve();
+    });
+  }
+  // Enhanced search functionality with debouncing
+  function initializeSearch() {
+    return new Promise((resolve) => {
+      const searchInputs = document.querySelectorAll(SELECTORS.searchInputs);
+      const searchForms = document.querySelectorAll('.search-form, form[action*="index.php"]');
+
+      if (searchInputs.length === 0) {
+        resolve();
+        return;
+      }
+
+      const debouncedSearch = Utils.debounce((input) => {
+        const value = input.value.trim();
+        if (value.length >= 2) {
+          const form = input.closest('form');
+          if (form && form.method.toLowerCase() === 'get') {
+            // Placeholder for live search implementation
+            console.log('Search:', value);
+          }
         }
+      }, CONFIG.SEARCH_DELAY);
+
+      searchInputs.forEach(input => {
+        input.addEventListener('input', () => debouncedSearch(input));
+
+        // Add clear button functionality
+        if (input.value.trim()) {
+          addClearButton(input);
+        }
+
+        input.addEventListener('input', function () {
+          if (this.value.trim()) {
+            addClearButton(this);
+          } else {
+            removeClearButton(this);
+          }
+        });
       });
+
+      resolve();
     });
 
     function addClearButton(input) {
@@ -140,7 +297,7 @@ document.addEventListener("DOMContentLoaded", function () {
       clearBtn.innerHTML = '<i class="bi bi-x-circle text-muted"></i>';
       clearBtn.style.zIndex = '10';
 
-      clearBtn.addEventListener('click', function () {
+      clearBtn.addEventListener('click', () => {
         input.value = '';
         input.focus();
         removeClearButton(input);
@@ -152,70 +309,72 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function removeClearButton(input) {
       const clearBtn = input.parentElement.querySelector('.search-clear-btn');
-      if (clearBtn) {
-        clearBtn.remove();
-      }
+      clearBtn?.remove();
     }
   }
-
-  // Modern animations and effects with fixed counter animation
+  // Optimized animations and effects
   function initializeAnimations() {
-    // Animated counters for statistics - Fixed implementation
-    const counters = document.querySelectorAll('.counter');
+    // Use single observer for all counters
+    initializeCounters();
+    initializeFloatingShapes();
+    initializeParallaxEffect();
+  }
 
-    if (counters.length > 0) {
-      const observerOptions = {
-        threshold: 0.3,
-        rootMargin: '0px 0px -50px 0px'
-      };
+  function initializeCounters() {
+    const counters = document.querySelectorAll(SELECTORS.counters);
+    if (counters.length === 0) return;
 
-      const counterObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting && !entry.target.dataset.animated) {
-            entry.target.dataset.animated = 'true';
-            animateCounter(entry.target);
-            counterObserver.unobserve(entry.target);
-          }
-        });
-      }, observerOptions);
+    const observerOptions = {
+      threshold: 0.3,
+      rootMargin: '0px 0px -50px 0px'
+    };
 
-      counters.forEach(counter => {
-        counterObserver.observe(counter);
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.dataset.animated) {
+          entry.target.dataset.animated = 'true';
+          animateCounter(entry.target);
+          counterObserver.unobserve(entry.target);
+        }
       });
-    }    // Card hover animations - removed transform animations for book cards
+    }, observerOptions);
 
-    // Floating shapes animation
+    counters.forEach(counter => counterObserver.observe(counter));
+  }
+
+  function initializeFloatingShapes() {
     const shapes = document.querySelectorAll('.shape, .floating-shape');
     shapes.forEach((shape, index) => {
       shape.style.animationDelay = `${index * 0.5}s`;
       shape.style.animationDuration = `${6 + index * 2}s`;
     });
-
-    // Parallax effect for hero section (only on desktop)
-    const hero = document.querySelector('.hero-section');
-    if (hero && window.innerWidth > 768) {
-      window.addEventListener('scroll', () => {
-        const scrolled = window.pageYOffset;
-        const rate = scrolled * -0.3;
-        hero.style.transform = `translateY(${rate}px)`;
-      });
-    }
   }
 
-  // Fixed counter animation function
+  function initializeParallaxEffect() {
+    const hero = document.querySelector('.hero-section');
+    if (!hero || window.innerWidth <= 768) return;
+
+    const handleParallax = Utils.throttle(() => {
+      const scrolled = window.pageYOffset;
+      const rate = scrolled * -0.3;
+      hero.style.transform = `translateY(${rate}px)`;
+    }, 16);
+
+    window.addEventListener('scroll', handleParallax, { passive: true });
+  }
+
+  // Optimized counter animation
   function animateCounter(element) {
     const target = parseInt(element.getAttribute('data-target') || element.textContent);
     if (isNaN(target) || target === 0) return;
 
-    const duration = 2000; // 2 seconds
     const startTime = performance.now();
     const startValue = 0;
 
     function updateCounter(currentTime) {
       const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+      const progress = Math.min(elapsed / CONFIG.COUNTER_ANIMATION_DURATION, 1);
 
-      // Use easing function for smooth animation
       const easeOutQuart = 1 - Math.pow(1 - progress, 4);
       const currentValue = Math.floor(startValue + (target * easeOutQuart));
 
@@ -230,61 +389,85 @@ document.addEventListener("DOMContentLoaded", function () {
 
     requestAnimationFrame(updateCounter);
   }
-
-  // Enhanced scroll effects
+  // Optimized scroll effects with single observer
   function initializeScrollEffects() {
-    // Fade in animation for elements
+    return new Promise((resolve) => {
+      initializeFadeEffects();
+      initializeSmoothScrolling();
+      initializeNavbarScrollEffect();
+      resolve();
+    });
+  }
+
+  function initializeFadeEffects() {
     const fadeElements = document.querySelectorAll('.fade-in');
-    if (fadeElements.length > 0) {
-      const fadeObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.style.opacity = '1';
-            entry.target.style.transform = 'translateY(0)';
-            fadeObserver.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.1 });
+    if (fadeElements.length === 0) return;
 
-      fadeElements.forEach(element => {
-        element.style.opacity = '0';
-        element.style.transform = 'translateY(30px)';
-        element.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-        fadeObserver.observe(element);
+    const fadeObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const element = entry.target;
+          element.style.opacity = '1';
+          element.style.transform = 'translateY(0)';
+          fadeObserver.unobserve(element);
+        }
       });
-    }
+    }, { threshold: 0.1 });
 
-    // Smooth scroll for anchor links
+    fadeElements.forEach(element => {
+      element.style.cssText = 'opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;';
+      fadeObserver.observe(element);
+    });
+  }
+  function initializeSmoothScrolling() {
     const anchors = document.querySelectorAll('a[href^="#"]');
     anchors.forEach(anchor => {
       anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+
+        // Skip if href is just '#' or empty
+        if (!href || href === '#' || href.length <= 1) {
+          return;
+        }
+
         e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-          target.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
+
+        try {
+          const target = document.querySelector(href);
+          if (target) {
+            target.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }
+        } catch (error) {
+          console.warn('Invalid selector for smooth scrolling:', href);
         }
       });
     });
-
-    // Navbar background change on scroll
-    const navbar = document.querySelector('.navbar');
-    if (navbar) {
-      window.addEventListener('scroll', function () {
-        if (window.scrollY > 50) {
-          navbar.classList.add('scrolled');
-        } else {
-          navbar.classList.remove('scrolled');
-        }
-      });
-    }
   }
 
-  // Enhanced form handlers and validation
+  function initializeNavbarScrollEffect() {
+    const navbar = document.querySelector(SELECTORS.navbar);
+    if (!navbar) return;
+
+    const handleScroll = Utils.throttle(() => {
+      navbar.classList.toggle('scrolled', window.scrollY > 50);
+    }, 16);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+  }
+  // Enhanced form handlers with validation
   function initializeFormHandlers() {
-    // Toggle password visibility
+    return new Promise((resolve) => {
+      initializePasswordToggles();
+      initializeFileUploads();
+      initializeFormValidation();
+      resolve();
+    });
+  }
+
+  function initializePasswordToggles() {
     const togglePasswordButtons = document.querySelectorAll('.toggle-password');
     togglePasswordButtons.forEach(button => {
       button.addEventListener('click', function () {
@@ -301,8 +484,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
     });
+  }
 
-    // File upload preview
+  function initializeFileUploads() {
+    // Cover image preview
     const coverImageInput = document.getElementById('cover_image');
     const coverPreview = document.getElementById('cover-preview');
 
@@ -311,7 +496,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const file = this.files[0];
         if (file && file.type.startsWith('image/')) {
           const reader = new FileReader();
-          reader.onload = function (e) {
+          reader.onload = e => {
             coverPreview.src = e.target.result;
             coverPreview.style.display = 'block';
           };
@@ -327,8 +512,9 @@ document.addEventListener("DOMContentLoaded", function () {
         validatePdfFile(this);
       });
     }
+  }
 
-    // Enhanced form validation
+  function initializeFormValidation() {
     const forms = document.querySelectorAll('form[data-validate]');
     forms.forEach(form => {
       form.addEventListener('submit', function (e) {
@@ -338,44 +524,98 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
 
-    // Real-time validation
     const inputs = document.querySelectorAll('input[required], textarea[required], select[required]');
     inputs.forEach(input => {
-      input.addEventListener('blur', function () {
-        validateField(this);
-      });
+      input.addEventListener('blur', () => validateField(input));
     });
   }
 
-  // Initialize Bootstrap tooltips and popovers
+  function validatePdfFile(input) {
+    const file = input.files[0];
+    if (!file) return true;
+
+    if (!file.type.includes('pdf')) {
+      showToast('Please select a valid PDF file', 'danger');
+      input.value = '';
+      return false;
+    }
+
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      showToast('File size must be less than 50MB', 'danger');
+      input.value = '';
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateForm(form) {
+    const inputs = form.querySelectorAll('input[required], textarea[required], select[required]');
+    let isValid = true;
+
+    inputs.forEach(input => {
+      if (!validateField(input)) {
+        isValid = false;
+      }
+    });
+
+    return isValid;
+  }
+
+  function validateField(field) {
+    const value = field.value.trim();
+    const isValid = value.length > 0;
+
+    field.classList.toggle('is-invalid', !isValid);
+    field.classList.toggle('is-valid', isValid);
+
+    return isValid;
+  }
+  // Initialize Bootstrap components efficiently
   function initializeTooltips() {
-    // Initialize tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+    return new Promise((resolve) => {
+      // Initialize tooltips
+      const tooltipElements = document.querySelectorAll(SELECTORS.tooltips);
+      if (tooltipElements.length > 0 && typeof bootstrap !== 'undefined') {
+        tooltipElements.forEach(element => {
+          try {
+            new bootstrap.Tooltip(element);
+          } catch (error) {
+            console.warn('Failed to initialize tooltip:', error);
+          }
+        });
+      }
 
-    // Initialize popovers
-    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
-    popoverTriggerList.map(function (popoverTriggerEl) {
-      return new bootstrap.Popover(popoverTriggerEl);
+      // Initialize popovers
+      const popoverElements = document.querySelectorAll(SELECTORS.popovers);
+      if (popoverElements.length > 0 && typeof bootstrap !== 'undefined') {
+        popoverElements.forEach(element => {
+          try {
+            new bootstrap.Popover(element);
+          } catch (error) {
+            console.warn('Failed to initialize popover:', error);
+          }
+        });
+      }
+
+      resolve();
     });
   }
 
-  // Enhanced pagination with smooth transitions
+  // Optimized pagination
   function initializePagination() {
     const paginationLinks = document.querySelectorAll('.pagination .page-link');
     paginationLinks.forEach(link => {
       link.addEventListener('click', function (e) {
         if (!this.parentElement.classList.contains('disabled')) {
-          // Add loading state
           this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
         }
       });
     });
   }
 
-  // Favorite books functionality
+  // Favorites functionality with error handling
   function initializeFavorites() {
     const favoriteButtons = document.querySelectorAll('[data-favorite-toggle]');
     favoriteButtons.forEach(button => {
@@ -388,166 +628,191 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function toggleFavorite(bookId, isFavorite, button) {
-    // Disable button during request
+  async function toggleFavorite(bookId, isFavorite, button) {
+    if (!bookId) {
+      console.error('Book ID is required for favorite toggle');
+      return;
+    }
+
     button.disabled = true;
+    const originalContent = button.innerHTML;
 
-    // Make AJAX request
-    fetch(`ajax/toggle-favorite.php`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ book_id: bookId })
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          // Update button state
-          const newIsFavorite = !isFavorite;
-          button.setAttribute('data-is-favorite', newIsFavorite.toString());
+    try {
+      const response = await fetch('ajax/toggle-favorite.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ book_id: bookId })
+      });
 
-          const icon = button.querySelector('i');
-          if (icon) {
-            icon.classList.toggle('bi-heart');
-            icon.classList.toggle('bi-heart-fill');
-          }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-          // Update button text if present
-          const text = button.querySelector('.btn-text');
-          if (text) {
-            text.textContent = newIsFavorite ? 'Remove from Favorites' : 'Add to Favorites';
-          }
+      const data = await response.json();
+
+      if (data.success) {
+        const newIsFavorite = !isFavorite;
+        button.setAttribute('data-is-favorite', newIsFavorite.toString());
+
+        const icon = button.querySelector('i');
+        if (icon) {
+          icon.classList.toggle('bi-heart');
+          icon.classList.toggle('bi-heart-fill');
         }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      })
-      .finally(() => {
-        button.disabled = false;
-      });
+
+        const text = button.querySelector('.btn-text');
+        if (text) {
+          text.textContent = newIsFavorite ? 'Remove from Favorites' : 'Add to Favorites';
+        }
+
+        showToast(data.message || 'Favorite updated successfully', 'success');
+      } else {
+        throw new Error(data.message || 'Failed to update favorite');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      showToast('Failed to update favorite. Please try again.', 'danger');
+      button.innerHTML = originalContent;
+    } finally {
+      button.disabled = false;
+    }
   }
-
-  // Enhanced image loading with lazy loading and error handling
+  // Optimized image loading with lazy loading
   function initializeImageLoading() {
-    const bookImages = document.querySelectorAll('.book-image, img[data-src]');
+    const bookImages = document.querySelectorAll(SELECTORS.bookImages);
+    if (bookImages.length === 0) return;
 
-    bookImages.forEach(img => {
-      // Add loading state
-      img.setAttribute('data-loading', 'true');
-
-      // Handle successful image load
-      img.addEventListener('load', function () {
-        this.removeAttribute('data-loading');
-        this.style.opacity = '0';
-        this.style.transition = 'opacity 0.3s ease';
-
-        // Fade in the image
-        setTimeout(() => {
-          this.style.opacity = '1';
-        }, 50);
+    // Create intersection observer for lazy loading
+    const imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const img = entry.target;
+          loadImage(img);
+          imageObserver.unobserve(img);
+        }
       });
-
-      // Handle image load error
-      img.addEventListener('error', function () {
-        this.removeAttribute('data-loading');
-        const placeholder = document.createElement('div');
-        placeholder.className = 'book-placeholder d-flex align-items-center justify-content-center';
-        placeholder.innerHTML = '<i class="bi bi-journal-bookmark display-4 text-primary opacity-50"></i>';
-        placeholder.style.cssText = this.style.cssText;
-        this.parentElement.replaceChild(placeholder, this);
-      });
+    }, {
+      rootMargin: '50px'
     });
 
-    // Implement intersection observer for lazy loading
-    if ('IntersectionObserver' in window) {
-      const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-            if (img.dataset.src) {
-              img.src = img.dataset.src;
-              img.removeAttribute('data-src');
-              observer.unobserve(img);
-            }
-          }
-        });
-      });
+    bookImages.forEach(img => {
+      img.setAttribute('data-loading', 'true');
 
-      document.querySelectorAll('img[data-src]').forEach(img => {
+      // Handle image load events
+      img.addEventListener('load', handleImageLoad, { once: true });
+      img.addEventListener('error', handleImageError, { once: true });
+
+      // Observe for lazy loading if data-src is present
+      if (img.dataset.src && 'IntersectionObserver' in window) {
         imageObserver.observe(img);
-      });
+      } else if (img.src) {
+        // Image already has src, just handle loading state
+        loadImage(img);
+      }
+    });
+  }
+
+  function loadImage(img) {
+    if (img.dataset.src && !img.src) {
+      img.src = img.dataset.src;
+      img.removeAttribute('data-src');
     }
   }
 
-  // Mobile-specific enhancements
+  function handleImageLoad() {
+    this.removeAttribute('data-loading');
+    this.style.cssText = 'opacity: 0; transition: opacity 0.3s ease;';
+
+    requestAnimationFrame(() => {
+      this.style.opacity = '1';
+    });
+  }
+
+  function handleImageError() {
+    this.removeAttribute('data-loading');
+    const placeholder = createImagePlaceholder();
+    placeholder.style.cssText = this.style.cssText;
+    this.parentElement?.replaceChild(placeholder, this);
+  }
+
+  function createImagePlaceholder() {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'book-placeholder d-flex align-items-center justify-content-center';
+    placeholder.innerHTML = '<i class="bi bi-journal-bookmark display-4 text-primary opacity-50"></i>';
+    return placeholder;
+  }
+  // Mobile-specific optimizations
   function initializeMobileEnhancements() {
-    // Detect touch device
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
     if (isTouchDevice) {
       document.body.classList.add('touch-device');
-
-      // Improve touch interactions for book cards
-      const bookCards = document.querySelectorAll('.book-card');
-      bookCards.forEach(card => {
-        let touchStartTime;
-
-        card.addEventListener('touchstart', function (e) {
-          touchStartTime = Date.now();
-          this.classList.add('touch-active');
-
-          // Add haptic feedback if supported
-          if (navigator.vibrate) {
-            navigator.vibrate(10);
-          }
-        }, { passive: true });
-
-        card.addEventListener('touchend', function (e) {
-          const touchDuration = Date.now() - touchStartTime;
-
-          setTimeout(() => {
-            this.classList.remove('touch-active');
-          }, 150);
-
-          // Handle quick taps (< 300ms) as clicks
-          if (touchDuration < 300) {
-            const link = this.querySelector('.book-cover-link, .stretched-link');
-            if (link && !e.target.closest('.badge, .btn')) {
-              // Prevent default touch handling
-              e.preventDefault();
-              e.stopPropagation();
-
-              // Navigate to book page
-              setTimeout(() => {
-                window.location.href = link.href;
-              }, 100);
-            }
-          }
-        });
-
-        card.addEventListener('touchcancel', function () {
-          this.classList.remove('touch-active');
-        });
-      });
+      initializeTouchInteractions();
     }
 
-    // Handle orientation changes
-    window.addEventListener('orientationchange', function () {
-      setTimeout(() => {
-        // Recalculate layouts after orientation change
+    // Handle orientation changes efficiently
+    let orientationTimeout;
+    window.addEventListener('orientationchange', () => {
+      clearTimeout(orientationTimeout);
+      orientationTimeout = setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 100);
     });
 
-    // Improve viewport handling on mobile
+    // Optimize viewport for mobile
+    optimizeViewport();
+  }
+
+  function initializeTouchInteractions() {
+    const bookCards = document.querySelectorAll('.book-card');
+
+    bookCards.forEach(card => {
+      let touchStartTime;
+      let touchStartY;
+
+      card.addEventListener('touchstart', function (e) {
+        touchStartTime = Date.now();
+        touchStartY = e.touches[0].clientY;
+        this.classList.add('touch-active');
+
+        if (navigator.vibrate) {
+          navigator.vibrate(10);
+        }
+      }, { passive: true });
+
+      card.addEventListener('touchend', function (e) {
+        const touchDuration = Date.now() - touchStartTime;
+        const touchEndY = e.changedTouches[0].clientY;
+        const touchDistance = Math.abs(touchEndY - touchStartY);
+
+        setTimeout(() => this.classList.remove('touch-active'), 150);
+
+        // Handle quick taps with minimal movement
+        if (touchDuration < 300 && touchDistance < 10) {
+          const link = this.querySelector('.book-cover-link, .stretched-link');
+          if (link && !e.target.closest('.badge, .btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            setTimeout(() => window.location.href = link.href, 100);
+          }
+        }
+      });
+
+      card.addEventListener('touchcancel', function () {
+        this.classList.remove('touch-active');
+      });
+    });
+  }
+
+  function optimizeViewport() {
     const viewport = document.querySelector('meta[name="viewport"]');
     if (viewport && window.innerWidth <= 768) {
       viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
   }
-
-  // Upload progress functionality
+  // Optimized upload progress
   function initializeUploadProgress() {
     const uploadForm = document.querySelector('form[enctype="multipart/form-data"]');
     if (!uploadForm) return;
@@ -555,10 +820,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const progressContainer = createProgressUI(uploadForm);
 
     uploadForm.addEventListener('submit', function (e) {
-      const pdfFile = document.getElementById('pdf_file')?.files[0];
-      const coverFile = document.getElementById('cover_image')?.files[0];
+      const files = [
+        document.getElementById('pdf_file')?.files[0],
+        document.getElementById('cover_image')?.files[0]
+      ].filter(Boolean);
 
-      if (pdfFile || coverFile) {
+      if (files.length > 0) {
         showProgress(progressContainer);
         simulateUploadProgress(progressContainer);
       }
@@ -598,7 +865,6 @@ document.addEventListener("DOMContentLoaded", function () {
     container.classList.remove('d-none');
     container.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    // Disable form submission button
     const submitBtn = container.previousElementSibling.querySelector('button[type="submit"]');
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -612,51 +878,49 @@ document.addEventListener("DOMContentLoaded", function () {
     const percentageText = container.querySelector('#upload-percentage');
 
     let progress = 0;
+    const statusMessages = [
+      'Uploading files...',
+      'Processing files...',
+      'Finalizing upload...',
+      'Upload complete!'
+    ];
+
     const interval = setInterval(() => {
       progress += Math.random() * 10;
+      const messageIndex = Math.floor(progress / 25);
 
-      if (progress < 30) {
-        statusText.textContent = 'Uploading files...';
-      } else if (progress < 60) {
-        statusText.textContent = 'Processing files...';
-      } else if (progress < 90) {
-        statusText.textContent = 'Finalizing upload...';
-      } else {
-        progress = 100;
-        statusText.textContent = 'Upload complete!';
-        clearInterval(interval);
+      if (messageIndex < statusMessages.length) {
+        statusText.textContent = statusMessages[messageIndex];
       }
 
-      progressBar.style.width = Math.min(progress, 100) + '%';
-      percentageText.textContent = Math.min(Math.floor(progress), 100) + '%';
-
       if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
         setTimeout(() => {
           progressBar.classList.remove('progress-bar-animated');
           progressBar.classList.add('bg-success');
         }, 500);
       }
+
+      progressBar.style.width = `${Math.min(progress, 100)}%`;
+      percentageText.textContent = `${Math.min(Math.floor(progress), 100)}%`;
     }, 200 + Math.random() * 300);
   }
-
-  // Initialize category page functionality
+  // Optimized category page functionality
   function initializeCategoryPage() {
-    // Only run on categories page
-    if (!document.querySelector('.category-card')) return;
+    if (!document.querySelector(SELECTORS.categoryCard)) return;
 
     initializeCategoryCards();
     initializeCategoryDeleteButtons();
   }
 
-  // Enhanced category card interactions
   function initializeCategoryCards() {
-    const categoryCards = document.querySelectorAll('.category-card');
+    const categoryCards = document.querySelectorAll(SELECTORS.categoryCard);
 
     categoryCards.forEach(card => {
-      // Handle card click for navigation with proper event handling
+      // Optimize card interactions
       card.addEventListener('click', function (e) {
-        // Don't navigate if clicking on admin controls or buttons
-        if (e.target.closest('.category-actions') || e.target.closest('button') || e.target.closest('a.btn-action')) {
+        if (e.target.closest('.category-actions, button, a.btn-action')) {
           return;
         }
 
@@ -666,7 +930,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
 
-      // Add keyboard navigation
+      // Keyboard navigation
       card.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -677,21 +941,20 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
 
-      // Make card focusable and accessible
+      // Accessibility improvements
       card.setAttribute('tabindex', '0');
       card.setAttribute('role', 'button');
 
       const categoryLink = card.querySelector('.category-link');
       if (categoryLink) {
-        card.setAttribute('aria-label', `View ${categoryLink.textContent.trim()} category`);
+        const categoryName = categoryLink.textContent.trim();
+        card.setAttribute('aria-label', `View ${categoryName} category`);
       }
     });
   }
 
-  // Enhanced delete functionality
   function initializeCategoryDeleteButtons() {
     const deleteButtons = document.querySelectorAll('.btn-delete[data-category-id]');
-
     deleteButtons.forEach(button => {
       button.addEventListener('click', function (e) {
         e.preventDefault();
@@ -700,46 +963,28 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-
-  // Book Detail Page Functionality
-  initializeBookDetailPage();
-
-  // Book detail page specific functionality
+  // Book detail page initialization
   function initializeBookDetailPage() {
-    // Check if we're on the book detail page
-    if (!document.querySelector('.book-detail-page')) {
-      return;
-    }
+    if (!document.querySelector(SELECTORS.bookDetailPage)) return;
 
-    // Initialize PDF viewer
     initializePDFViewer();
-
-    // Initialize favorite functionality
     initializeBookFavorites();
-
-    // Initialize fullscreen functionality
     initializeFullscreenViewer();
-
-    // Initialize download tracking
     initializeDownloadTracking();
   }
 
-  // PDF Viewer functionality
   function initializePDFViewer() {
     const iframe = document.querySelector('.pdf-iframe');
     const loadingIndicator = document.querySelector('.viewer-loading');
 
     if (iframe && loadingIndicator) {
-      // Show loading indicator initially
       loadingIndicator.style.display = 'flex';
 
-      // Hide loading indicator when iframe loads
       iframe.addEventListener('load', function () {
         loadingIndicator.style.display = 'none';
         iframe.classList.add('loaded');
-      });
+      }, { once: true });
 
-      // Handle iframe load errors
       iframe.addEventListener('error', function () {
         loadingIndicator.innerHTML = `
           <div class="error-icon">
@@ -747,101 +992,80 @@ document.addEventListener("DOMContentLoaded", function () {
           </div>
           <span>Failed to load PDF. Please try again.</span>
         `;
-      });
+      }, { once: true });
     }
   }
 
-  // Book favorites functionality
   function initializeBookFavorites() {
     const favoriteForm = document.querySelector('.favorite-form');
     const favoriteBtn = document.querySelector('.action-btn-favorite');
 
     if (favoriteForm && favoriteBtn) {
-      favoriteForm.addEventListener('submit', function (e) {
+      favoriteForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        // Add loading state
         favoriteBtn.disabled = true;
         const originalContent = favoriteBtn.innerHTML;
         favoriteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span>Processing...</span>';
 
-        // Submit form via fetch
-        const formData = new FormData(favoriteForm);
-
-        fetch(favoriteForm.action, {
-          method: 'POST',
-          body: formData
-        })
-          .then(response => response.text())
-          .then(() => {
-            // Reload page to update favorite status
-            window.location.reload();
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            favoriteBtn.disabled = false;
-            favoriteBtn.innerHTML = originalContent;
-            showToast('Error updating favorite status', 'danger');
+        try {
+          const formData = new FormData(favoriteForm);
+          const response = await fetch(favoriteForm.action, {
+            method: 'POST',
+            body: formData
           });
+
+          if (response.ok) {
+            window.location.reload();
+          } else {
+            throw new Error('Network response was not ok');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          favoriteBtn.disabled = false;
+          favoriteBtn.innerHTML = originalContent;
+          showToast('Error updating favorite status', 'danger');
+        }
       });
     }
   }
 
-  // Fullscreen viewer functionality
   function initializeFullscreenViewer() {
     const fullscreenBtn = document.querySelector('.viewer-btn-fullscreen');
     const pdfContainer = document.querySelector('.pdf-viewer-container');
 
     if (fullscreenBtn && pdfContainer) {
-      fullscreenBtn.addEventListener('click', function () {
-        toggleFullscreen();
-      });
-
-      // Listen for fullscreen changes
-      document.addEventListener('fullscreenchange', function () {
-        updateFullscreenButton();
-      });
+      fullscreenBtn.addEventListener('click', toggleFullscreen);
+      document.addEventListener('fullscreenchange', updateFullscreenButton);
     }
   }
 
-  // Download tracking
   function initializeDownloadTracking() {
     const downloadBtns = document.querySelectorAll('[data-action="download"]');
 
     downloadBtns.forEach(btn => {
-      btn.addEventListener('click', function (e) {
-        // Add download animation
+      btn.addEventListener('click', function () {
         const icon = btn.querySelector('i');
         if (icon) {
           icon.classList.add('animate-bounce');
-          setTimeout(() => {
-            icon.classList.remove('animate-bounce');
-          }, 1000);
+          setTimeout(() => icon.classList.remove('animate-bounce'), 1000);
         }
-
-        // Track download (could be enhanced with analytics)
         console.log('Download initiated for book:', btn.href);
       });
     });
   }
-
-  // Enhanced admin dashboard functionality
+  // Optimized admin dashboard functionality
   function initializeAdminDashboard() {
-    // Initialize counter animations for dashboard stats
-    initializeCounterAnimations();
-
-    // Initialize chart animations
-    initializeChartAnimations();
-
-    // Initialize real-time updates
-    initializeRealTimeUpdates();
-
-    // Initialize admin notifications
+    initializeAdminCounters();
+    initializeAdminCharts();
+    initializeAdminUpdates();
     initializeAdminNotifications();
+    initializeAdminInteractions();
   }
 
-  function initializeCounterAnimations() {
+  function initializeAdminCounters() {
     const counters = document.querySelectorAll('.admin-dashboard-card h3');
+    if (counters.length === 0) return;
 
     const observerOptions = {
       threshold: 0.3,
@@ -850,8 +1074,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const counterObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          animateCounter(entry.target);
+        if (entry.isIntersecting && !entry.target.dataset.animated) {
+          entry.target.dataset.animated = 'true';
+          animateAdminCounter(entry.target);
           counterObserver.unobserve(entry.target);
         }
       });
@@ -864,7 +1089,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function animateCounter(element) {
+  function animateAdminCounter(element) {
     const text = element.textContent;
     const numMatch = text.match(/[\d,]+/);
     if (!numMatch) return;
@@ -872,13 +1097,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const targetValue = parseInt(numMatch[0].replace(/,/g, ''));
     if (isNaN(targetValue)) return;
 
-    const duration = 2000;
     const startTime = performance.now();
     const startValue = 0;
 
     function updateCounter(currentTime) {
       const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+      const progress = Math.min(elapsed / CONFIG.COUNTER_ANIMATION_DURATION, 1);
 
       const easeOut = 1 - Math.pow(1 - progress, 3);
       const currentValue = Math.floor(startValue + (targetValue * easeOut));
@@ -893,15 +1117,12 @@ document.addEventListener("DOMContentLoaded", function () {
     requestAnimationFrame(updateCounter);
   }
 
-  function initializeChartAnimations() {
+  function initializeAdminCharts() {
     const chartBars = document.querySelectorAll('.trend-chart .bg-success, .trend-chart .bg-info');
 
     chartBars.forEach((bar, index) => {
       setTimeout(() => {
-        bar.style.opacity = '0';
-        bar.style.transform = 'scaleY(0)';
-        bar.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
-
+        bar.style.cssText = 'opacity: 0; transform: scaleY(0); transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);';
         setTimeout(() => {
           bar.style.opacity = '1';
           bar.style.transform = 'scaleY(1)';
@@ -910,12 +1131,18 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function initializeRealTimeUpdates() {
-    // Update timestamps every minute
-    setInterval(updateRelativeTimestamps, 60000);
+  function initializeAdminUpdates() {
+    // Update timestamps periodically
+    const timestampInterval = setInterval(updateRelativeTimestamps, CONFIG.TIMESTAMP_UPDATE_INTERVAL);
 
-    // Check for pending requests notifications
-    setInterval(checkPendingNotifications, 300000); // 5 minutes
+    // Check for notifications
+    const notificationInterval = setInterval(checkPendingNotifications, CONFIG.NOTIFICATION_CHECK_INTERVAL);
+
+    // Clean up intervals when leaving the page
+    window.addEventListener('beforeunload', () => {
+      clearInterval(timestampInterval);
+      clearInterval(notificationInterval);
+    });
   }
 
   function updateRelativeTimestamps() {
@@ -944,16 +1171,12 @@ document.addEventListener("DOMContentLoaded", function () {
   function checkPendingNotifications() {
     const pendingBadge = document.querySelector('.notification-badge');
     if (pendingBadge) {
-      // Add pulse animation to draw attention
       pendingBadge.classList.add('animate-pulse');
-      setTimeout(() => {
-        pendingBadge.classList.remove('animate-pulse');
-      }, 2000);
+      setTimeout(() => pendingBadge.classList.remove('animate-pulse'), 2000);
     }
   }
 
   function initializeAdminNotifications() {
-    // Show welcome message for admin
     if (sessionStorage.getItem('admin-welcome') !== 'shown') {
       setTimeout(() => {
         showToast('Welcome to the Admin Dashboard! 👋', 'info');
@@ -961,20 +1184,17 @@ document.addEventListener("DOMContentLoaded", function () {
       }, 1000);
     }
 
-    // Check system health
     checkSystemHealth();
   }
 
   function checkSystemHealth() {
-    const healthIndicators = document.querySelectorAll('.system-health-indicator');
     const pendingCount = parseInt(document.querySelector('[data-pending-count]')?.getAttribute('data-pending-count') || '0');
 
-    // Update health indicators based on system status
     if (pendingCount > 20) {
       showToast('High workload detected. Consider reviewing pending requests.', 'warning');
     }
 
-    // Animate health indicators
+    const healthIndicators = document.querySelectorAll('.system-health-indicator');
     healthIndicators.forEach((indicator, index) => {
       setTimeout(() => {
         indicator.style.animation = 'pulse 2s infinite';
@@ -982,9 +1202,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Enhanced admin dashboard interactions
   function initializeAdminInteractions() {
-    // Quick action button enhancements
+    // Quick action buttons
     const quickActionBtns = document.querySelectorAll('.quick-action-btn');
     quickActionBtns.forEach(btn => {
       btn.addEventListener('mouseenter', function () {
@@ -996,7 +1215,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
 
-    // Card hover effects
+    // Dashboard cards
     const dashboardCards = document.querySelectorAll('.admin-dashboard-card');
     dashboardCards.forEach(card => {
       card.addEventListener('mouseenter', function () {
@@ -1010,7 +1229,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
 
-    // Table row click handlers
+    // Table rows
     const tableRows = document.querySelectorAll('.admin-table tbody tr');
     tableRows.forEach(row => {
       row.addEventListener('click', function () {
@@ -1022,120 +1241,65 @@ document.addEventListener("DOMContentLoaded", function () {
 
       row.style.cursor = 'pointer';
     });
-  }
 
-  // Call additional initialization functions
-  initializeLazyLoading();
-  optimizePDFLoading();
-
-  // Additional admin dashboard enhancements
-  function initializeAdvancedAdminFeatures() {
-    // Auto-refresh dashboard stats every 5 minutes
-    if (document.querySelector('.admin-dashboard-card')) {
-      setInterval(refreshDashboardStats, 300000);
-    }
-
-    // Keyboard shortcuts for admin actions
+    // Keyboard shortcuts
     initializeAdminKeyboardShortcuts();
-
-    // Enhanced tooltips for admin interface
-    initializeAdvancedTooltips();
-  }
-
-  function refreshDashboardStats() {
-    const statsCards = document.querySelectorAll('.admin-dashboard-card h3');
-
-    // Add subtle loading animation
-    statsCards.forEach(card => {
-      card.style.opacity = '0.7';
-      card.style.transition = 'opacity 0.3s ease';
-
-      setTimeout(() => {
-        card.style.opacity = '1';
-      }, 500);
-    });
-
-    // In a real implementation, this would fetch new data via AJAX
-    console.log('Dashboard stats refreshed');
   }
 
   function initializeAdminKeyboardShortcuts() {
     document.addEventListener('keydown', function (e) {
-      // Only activate on admin pages
-      if (!document.querySelector('.admin-dashboard-card')) return;
+      if (!document.querySelector(SELECTORS.adminDashboard)) return;
 
-      // Ctrl/Cmd + specific keys for admin shortcuts
       if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case 'b':
-            e.preventDefault();
-            window.location.href = 'add-book.php';
-            break;
-          case 'c':
-            e.preventDefault();
-            window.location.href = 'add-category.php';
-            break;
-          case 'r':
-            e.preventDefault();
-            window.location.href = 'requests.php';
-            break;
-          case 'u':
-            e.preventDefault();
-            window.location.href = 'users.php';
-            break;
+        const shortcuts = {
+          'b': 'add-book.php',
+          'c': 'add-category.php',
+          'r': 'requests.php',
+          'u': 'users.php'
+        };
+
+        if (shortcuts[e.key]) {
+          e.preventDefault();
+          window.location.href = shortcuts[e.key];
         }
       }
     });
   }
+  // Optimized profile page functionality
+  function initializeProfilePage() {
+    if (!document.querySelector(SELECTORS.profilePage)) return;
 
-  function initializeAdvancedTooltips() {
-    // Enhanced tooltips for admin dashboard
-    const tooltipElements = document.querySelectorAll('.admin-dashboard-card [title]');
+    initializeProfileTabs();
+  }
 
-    tooltipElements.forEach(element => {
-      element.addEventListener('mouseenter', function () {
-        const tooltip = document.createElement('div');
-        tooltip.className = 'custom-tooltip';
-        tooltip.textContent = this.getAttribute('title');
-        tooltip.style.cssText = `
-          position: absolute;
-          background: rgba(0,0,0,0.8);
-          color: white;
-          padding: 0.5rem;
-          border-radius: 4px;
-          font-size: 0.8rem;
-          z-index: 1000;
-          pointer-events: none;
-          white-space: nowrap;
-        `;
+  function initializeProfileTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
 
-        document.body.appendChild(tooltip);
+    if (tabButtons.length === 0) return;
 
-        const rect = this.getBoundingClientRect();
-        tooltip.style.left = rect.left + 'px';
-        tooltip.style.top = (rect.bottom + 5) + 'px';
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const targetTab = button.getAttribute('data-tab');
 
-        this._tooltip = tooltip;
-      });
+        // Remove active classes
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        tabContents.forEach(content => content.classList.remove('active'));
 
-      element.addEventListener('mouseleave', function () {
-        if (this._tooltip) {
-          this._tooltip.remove();
-          this._tooltip = null;
+        // Add active classes
+        button.classList.add('active');
+        const targetContent = document.getElementById(targetTab + '-tab');
+        if (targetContent) {
+          targetContent.classList.add('active');
         }
       });
     });
   }
-
-  // Initialize advanced admin features
-  initializeAdvancedAdminFeatures();
 });
 
-// Global functions for book detail page
+// Global utility functions and event handlers
 window.toggleFullscreen = function () {
   const pdfContainer = document.querySelector('.pdf-viewer-container');
-  const fullscreenBtn = document.querySelector('.viewer-btn-fullscreen');
-
   if (!pdfContainer) return;
 
   if (!document.fullscreenElement) {
@@ -1164,13 +1328,13 @@ function updateFullscreenButton() {
 }
 
 window.confirmDelete = function (bookTitle) {
-  const message = `Are you sure you want to delete "${bookTitle}"?\n\nThis action cannot be undone and will permanently remove the book from the library.`;
+  const message = `Are you sure you want to delete "${Utils.sanitizeInput(bookTitle)}"?\n\nThis action cannot be undone and will permanently remove the book from the library.`;
   return confirm(message);
 };
 
-// Enhanced toast notification function
+// Enhanced toast notification system
 function showToast(message, type = 'info') {
-  // Remove existing toasts
+  // Remove existing toasts to prevent spam
   const existingToasts = document.querySelectorAll('.custom-toast');
   existingToasts.forEach(toast => toast.remove());
 
@@ -1201,89 +1365,43 @@ function showToast(message, type = 'info') {
   toast.innerHTML = `
     <div class="d-flex align-items-center">
       <i class="bi bi-${icon} me-2"></i>
-      <span>${message}</span>
+      <span>${Utils.sanitizeInput(message)}</span>
     </div>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   `;
 
   document.body.appendChild(toast);
 
-  // Auto-remove after 5 seconds
-  setTimeout(() => {
+  // Auto-remove toast
+  const timeoutId = setTimeout(() => {
     if (toast.parentNode) {
       toast.style.animation = 'slideOut 0.3s ease-in forwards';
-      setTimeout(() => {
-        toast.remove();
-      }, 300);
+      setTimeout(() => toast.remove(), 300);
     }
-  }, 5000);
+  }, CONFIG.TOAST_DURATION);
+
+  // Clear timeout if manually dismissed
+  toast.addEventListener('closed.bs.alert', () => {
+    clearTimeout(timeoutId);
+  });
 }
 
-// Add CSS animations for toast
-if (!document.querySelector('#toast-animations')) {
-  const style = document.createElement('style');
-  style.id = 'toast-animations';
-  style.textContent = `
-    @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-    
-    @keyframes slideOut {
-      from {
-        transform: translateX(0);
-        opacity: 1;
-      }
-      to {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-    }
-    
-    @keyframes bounce {
-      0%, 20%, 50%, 80%, 100% {
-        transform: translateY(0);
-      }
-      40% {
-        transform: translateY(-10px);
-      }
-      60% {
-        transform: translateY(-5px);
-      }
-    }
-    
-    .animate-bounce {
-      animation: bounce 1s ease-in-out;
-    }    `; document.head.appendChild(style);
-}
-
-console.log('DUET PDF Library initialized successfully');
-
-// Global category delete function (accessible from inline onclick handlers)
+// Global category delete handler
 function handleCategoryDelete(button) {
   const categoryName = button.getAttribute('data-category-name');
   const categoryId = button.getAttribute('data-category-id');
 
   if (!categoryName || !categoryId) {
-    alert('Error: Category information not found');
+    showToast('Error: Category information not found', 'danger');
     return;
   }
 
-  // Enhanced confirmation dialog
-  const confirmMessage = `Are you sure you want to delete the category "${categoryName}"?\n\nThis action cannot be undone. Books in this category will remain but become uncategorized.`;
+  const confirmMessage = `Are you sure you want to delete the category "${Utils.sanitizeInput(categoryName)}"?\n\nThis action cannot be undone. Books in this category will remain but become uncategorized.`;
 
   if (confirm(confirmMessage)) {
-    // Show loading state
     button.disabled = true;
     button.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
-    // Create form and submit
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = 'admin/delete-category.php';
@@ -1299,25 +1417,138 @@ function handleCategoryDelete(button) {
   }
 }
 
-// Global utility functions
-window.duetLibrary = {
-  showToast: function (message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    toast.innerHTML = `
-      ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-      toast.remove();
-    }, 5000);
-  },
-
-  confirmDelete: function (message = 'Are you sure you want to delete this item?') {
-    return confirm(message);
+// Profile page favorite removal
+async function removeFromFavorites(bookId) {
+  if (!bookId) {
+    showToast('Invalid book ID', 'danger');
+    return;
   }
+
+  const favoriteBtn = document.querySelector(`[data-book-id="${bookId}"] .favorite-btn`);
+  if (!favoriteBtn) return;
+
+  const originalContent = favoriteBtn.innerHTML;
+  favoriteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+  favoriteBtn.disabled = true;
+
+  try {
+    const response = await fetch('profile.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `action=remove_favorite&book_id=${encodeURIComponent(bookId)}`
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (result.success) {
+      const bookCard = document.querySelector(`[data-book-id="${bookId}"]`);
+      if (bookCard) {
+        bookCard.style.cssText = 'opacity: 0; transform: scale(0.8); transition: all 0.3s ease;';
+
+        setTimeout(() => {
+          bookCard.remove();
+          checkEmptyFavorites();
+          updateFavoriteStats();
+        }, 300);
+      }
+
+      showToast('Book removed from favorites', 'success');
+    } else {
+      throw new Error(result.message || 'Failed to remove favorite');
+    }
+  } catch (error) {
+    console.error('Error removing favorite:', error);
+    favoriteBtn.innerHTML = originalContent;
+    favoriteBtn.disabled = false;
+    showToast('Failed to remove favorite. Please try again.', 'danger');
+  }
+}
+
+function checkEmptyFavorites() {
+  const remainingCards = document.querySelectorAll('.books-grid .book-card');
+  if (remainingCards.length === 0) {
+    const favoritesTab = document.getElementById('favorites-tab');
+    if (favoritesTab) {
+      favoritesTab.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">
+            <i class="bi bi-heart"></i>
+          </div>
+          <h3>No favorite books yet</h3>
+          <p>Browse the library and click the heart icon to add books to your favorites</p>
+          <a href="index.php" class="btn btn-primary">
+            <i class="bi bi-book"></i> Browse Books
+          </a>
+        </div>
+      `;
+    }
+  }
+}
+
+function updateFavoriteStats() {
+  const statNumber = document.querySelector('.stat-card .stat-number');
+  if (statNumber) {
+    const currentCount = parseInt(statNumber.textContent) || 0;
+    statNumber.textContent = Math.max(0, currentCount - 1);
+  }
+}
+
+// Global utility object for external use
+window.duetLibrary = {
+  showToast,
+  confirmDelete: (message = 'Are you sure you want to delete this item?') => confirm(message),
+  utils: Utils
 };
+
+// Add required CSS animations
+if (!document.querySelector('#duet-animations')) {
+  const style = document.createElement('style');
+  style.id = 'duet-animations';
+  style.textContent = `
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      60% { transform: translateY(-5px); }
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    
+    .animate-bounce { animation: bounce 1s ease-in-out; }
+    .animate-pulse { animation: pulse 2s infinite; }
+    
+    .touch-device .book-card.touch-active {
+      transform: scale(0.98);
+      transition: transform 0.1s ease;
+    }
+    
+    .navbar {
+      transition: transform 0.3s ease;
+    }
+    
+    .navbar-scrolled {
+      backdrop-filter: blur(10px);
+      background-color: rgba(255, 255, 255, 0.95);
+    }
+  `;
+  document.head.appendChild(style);
+}

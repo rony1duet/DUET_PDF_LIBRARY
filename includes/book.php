@@ -1088,4 +1088,106 @@ class Book
 
         throw new Exception("Unable to generate download URL for file: " . $filePath);
     }
+
+    /**
+     * Get user's favorite books with pagination
+     */
+    public function getFavorites($page = 1, $perPage = 20, $userId = null)
+    {
+        if ($userId === null) {
+            if (!$this->auth->isLoggedIn()) {
+                return ['books' => [], 'total' => 0];
+            }
+            $userId = $this->auth->getUserId();
+        }
+
+        $offset = ($page - 1) * $perPage;
+
+        // Get total count
+        $countSql = "SELECT COUNT(*) as total FROM favorites f 
+                     INNER JOIN books b ON f.book_id = b.book_id 
+                     WHERE f.user_id = :user_id AND b.status = 'approved'";
+        $total = $this->db->query($countSql, ['user_id' => $userId])->fetch()['total'];
+
+        // Get favorite books
+        $sql = "SELECT b.*, c.name as category_name, f.created_at as favorited_at,
+                       COALESCE(dc.download_count, 0) as download_count
+                FROM favorites f
+                INNER JOIN books b ON f.book_id = b.book_id
+                LEFT JOIN categories c ON b.category_id = c.category_id
+                LEFT JOIN (
+                    SELECT book_id, COUNT(*) as download_count 
+                    FROM downloads 
+                    GROUP BY book_id
+                ) dc ON b.book_id = dc.book_id
+                WHERE f.user_id = :user_id AND b.status = 'approved'
+                ORDER BY f.created_at DESC
+                LIMIT :limit OFFSET :offset";
+
+        $params = [
+            'user_id' => $userId,
+            'limit' => $perPage,
+            'offset' => $offset
+        ];
+
+        $result = $this->db->query($sql, $params);
+        $books = $result->fetchAll();
+
+        return [
+            'books' => $books,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => ceil($total / $perPage)
+        ];
+    }
+
+    /**
+     * Get user's download history with pagination
+     */
+    public function getUserDownloads($userId = null, $page = 1, $perPage = 10)
+    {
+        if ($userId === null) {
+            if (!$this->auth->isLoggedIn()) {
+                return [];
+            }
+            $userId = $this->auth->getUserId();
+        }
+
+        $offset = ($page - 1) * $perPage;
+
+        $sql = "SELECT b.book_id, b.title, b.author, b.edition, d.downloaded_at
+                FROM downloads d
+                INNER JOIN books b ON d.book_id = b.book_id
+                WHERE d.user_id = :user_id AND b.status = 'approved'
+                ORDER BY d.downloaded_at DESC
+                LIMIT :limit OFFSET :offset";
+
+        $params = [
+            'user_id' => $userId,
+            'limit' => $perPage,
+            'offset' => $offset
+        ];
+
+        $result = $this->db->query($sql, $params);
+        return $result->fetchAll();
+    }
+
+    /**
+     * Remove a book from user's favorites
+     */
+    public function removeFavorite($bookId, $userId = null)
+    {
+        if ($userId === null) {
+            if (!$this->auth->isLoggedIn()) {
+                throw new Exception("You must be logged in to remove favorites");
+            }
+            $userId = $this->auth->getUserId();
+        }
+
+        $sql = "DELETE FROM favorites WHERE book_id = :book_id AND user_id = :user_id";
+        $params = ['book_id' => $bookId, 'user_id' => $userId];
+
+        return $this->db->query($sql, $params);
+    }
 }
