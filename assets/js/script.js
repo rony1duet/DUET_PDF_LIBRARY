@@ -19,6 +19,11 @@ document.addEventListener("DOMContentLoaded", function () {
   initializeUploadProgress();
   initializeCategoryPage(); // Re-added category functionality
 
+  // Initialize admin dashboard if on admin page
+  if (document.querySelector('.admin-dashboard-card')) {
+    initializeAdminDashboard();
+  }
+
   // Auto-dismiss flash messages with enhanced animations
   function initializeFlashMessages() {
     const flashMessages = document.querySelectorAll(".alert");
@@ -820,120 +825,310 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Enhanced mobile experience
-  initializeMobileBookPage();
+  // Enhanced admin dashboard functionality
+  function initializeAdminDashboard() {
+    // Initialize counter animations for dashboard stats
+    initializeCounterAnimations();
 
-  // Mobile-specific book page enhancements
-  function initializeMobileBookPage() {
-    if (!document.querySelector('.book-detail-page')) {
-      return;
-    }
+    // Initialize chart animations
+    initializeChartAnimations();
 
-    // Add swipe gestures for mobile PDF viewer (if supported)
-    const pdfContainer = document.querySelector('.pdf-viewer-container');
-    if (pdfContainer && 'ontouchstart' in window) {
-      let startX, startY, startTime;
+    // Initialize real-time updates
+    initializeRealTimeUpdates();
 
-      pdfContainer.addEventListener('touchstart', function (e) {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        startTime = Date.now();
-      }, { passive: true });
+    // Initialize admin notifications
+    initializeAdminNotifications();
+  }
 
-      pdfContainer.addEventListener('touchend', function (e) {
-        if (!startX || !startY) return;
+  function initializeCounterAnimations() {
+    const counters = document.querySelectorAll('.admin-dashboard-card h3');
 
-        const endX = e.changedTouches[0].clientX;
-        const endY = e.changedTouches[0].clientY;
-        const diffX = startX - endX;
-        const diffY = startY - endY;
-        const timeDiff = Date.now() - startTime;
+    const observerOptions = {
+      threshold: 0.3,
+      rootMargin: '0px 0px -50px 0px'
+    };
 
-        // Only process quick swipes
-        if (timeDiff > 300) return;
-
-        // Vertical swipe to toggle fullscreen
-        if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 50) {
-          if (diffY > 0) {
-            // Swipe up - enter fullscreen
-            if (!document.fullscreenElement) {
-              toggleFullscreen();
-            }
-          }
-        }
-
-        startX = startY = null;
-      }, { passive: true });
-    }
-
-    // Improve mobile scrolling behavior
-    const bookInfoWrapper = document.querySelector('.book-info-wrapper');
-    if (bookInfoWrapper && window.innerWidth <= 991) {
-      // Make sure sticky positioning works well on mobile
-      bookInfoWrapper.style.position = 'static';
-    }
-
-    // Add haptic feedback for supported devices
-    const actionBtns = document.querySelectorAll('.action-btn');
-    actionBtns.forEach(btn => {
-      btn.addEventListener('click', function () {
-        if ('vibrate' in navigator) {
-          navigator.vibrate(50); // Light haptic feedback
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          animateCounter(entry.target);
+          counterObserver.unobserve(entry.target);
         }
       });
+    }, observerOptions);
+
+    counters.forEach(counter => {
+      if (counter.textContent.match(/\d/)) {
+        counterObserver.observe(counter);
+      }
     });
   }
 
-  // Lazy loading for book cover images
-  function initializeLazyLoading() {
-    const bookCoverImages = document.querySelectorAll('.book-cover-image');
+  function animateCounter(element) {
+    const text = element.textContent;
+    const numMatch = text.match(/[\d,]+/);
+    if (!numMatch) return;
 
-    if ('IntersectionObserver' in window) {
-      const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const img = entry.target;
-            img.src = img.dataset.src || img.src;
-            img.classList.remove('lazy');
-            observer.unobserve(img);
-          }
-        });
-      });
+    const targetValue = parseInt(numMatch[0].replace(/,/g, ''));
+    if (isNaN(targetValue)) return;
 
-      bookCoverImages.forEach(img => {
-        if (img.dataset.src) {
-          imageObserver.observe(img);
-        }
-      });
+    const duration = 2000;
+    const startTime = performance.now();
+    const startValue = 0;
+
+    function updateCounter(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const currentValue = Math.floor(startValue + (targetValue * easeOut));
+
+      element.textContent = text.replace(/[\d,]+/, currentValue.toLocaleString());
+
+      if (progress < 1) {
+        requestAnimationFrame(updateCounter);
+      }
+    }
+
+    requestAnimationFrame(updateCounter);
+  }
+
+  function initializeChartAnimations() {
+    const chartBars = document.querySelectorAll('.trend-chart .bg-success, .trend-chart .bg-info');
+
+    chartBars.forEach((bar, index) => {
+      setTimeout(() => {
+        bar.style.opacity = '0';
+        bar.style.transform = 'scaleY(0)';
+        bar.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+
+        setTimeout(() => {
+          bar.style.opacity = '1';
+          bar.style.transform = 'scaleY(1)';
+        }, 100);
+      }, index * 100);
+    });
+  }
+
+  function initializeRealTimeUpdates() {
+    // Update timestamps every minute
+    setInterval(updateRelativeTimestamps, 60000);
+
+    // Check for pending requests notifications
+    setInterval(checkPendingNotifications, 300000); // 5 minutes
+  }
+
+  function updateRelativeTimestamps() {
+    const timestamps = document.querySelectorAll('[data-timestamp]');
+    timestamps.forEach(element => {
+      const timestamp = element.getAttribute('data-timestamp');
+      const relativeTime = getRelativeTimeString(new Date(timestamp));
+      element.textContent = relativeTime;
+    });
+  }
+
+  function getRelativeTimeString(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
+  function checkPendingNotifications() {
+    const pendingBadge = document.querySelector('.notification-badge');
+    if (pendingBadge) {
+      // Add pulse animation to draw attention
+      pendingBadge.classList.add('animate-pulse');
+      setTimeout(() => {
+        pendingBadge.classList.remove('animate-pulse');
+      }, 2000);
     }
   }
 
-  // Performance optimization for PDF loading
-  function optimizePDFLoading() {
-    const iframe = document.querySelector('.pdf-iframe');
-    if (!iframe) return;
-
-    // Add loading="lazy" attribute for better performance
-    iframe.setAttribute('loading', 'lazy');
-
-    // Preload PDF on hover (desktop only)
-    if (window.innerWidth > 768) {
-      const downloadBtns = document.querySelectorAll('[data-action="download"]');
-      downloadBtns.forEach(btn => {
-        btn.addEventListener('mouseenter', function () {
-          // Preload PDF in background
-          const link = document.createElement('link');
-          link.rel = 'prefetch';
-          link.href = iframe.src;
-          document.head.appendChild(link);
-        }, { once: true });
-      });
+  function initializeAdminNotifications() {
+    // Show welcome message for admin
+    if (sessionStorage.getItem('admin-welcome') !== 'shown') {
+      setTimeout(() => {
+        showToast('Welcome to the Admin Dashboard! 👋', 'info');
+        sessionStorage.setItem('admin-welcome', 'shown');
+      }, 1000);
     }
+
+    // Check system health
+    checkSystemHealth();
+  }
+
+  function checkSystemHealth() {
+    const healthIndicators = document.querySelectorAll('.system-health-indicator');
+    const pendingCount = parseInt(document.querySelector('[data-pending-count]')?.getAttribute('data-pending-count') || '0');
+
+    // Update health indicators based on system status
+    if (pendingCount > 20) {
+      showToast('High workload detected. Consider reviewing pending requests.', 'warning');
+    }
+
+    // Animate health indicators
+    healthIndicators.forEach((indicator, index) => {
+      setTimeout(() => {
+        indicator.style.animation = 'pulse 2s infinite';
+      }, index * 200);
+    });
+  }
+
+  // Enhanced admin dashboard interactions
+  function initializeAdminInteractions() {
+    // Quick action button enhancements
+    const quickActionBtns = document.querySelectorAll('.quick-action-btn');
+    quickActionBtns.forEach(btn => {
+      btn.addEventListener('mouseenter', function () {
+        this.style.transform = 'translateY(-3px) scale(1.02)';
+      });
+
+      btn.addEventListener('mouseleave', function () {
+        this.style.transform = 'translateY(0) scale(1)';
+      });
+    });
+
+    // Card hover effects
+    const dashboardCards = document.querySelectorAll('.admin-dashboard-card');
+    dashboardCards.forEach(card => {
+      card.addEventListener('mouseenter', function () {
+        this.style.transform = 'translateY(-4px)';
+        this.style.boxShadow = '0 8px 32px rgba(0,0,0,0.12)';
+      });
+
+      card.addEventListener('mouseleave', function () {
+        this.style.transform = 'translateY(0)';
+        this.style.boxShadow = '';
+      });
+    });
+
+    // Table row click handlers
+    const tableRows = document.querySelectorAll('.admin-table tbody tr');
+    tableRows.forEach(row => {
+      row.addEventListener('click', function () {
+        const link = this.querySelector('a');
+        if (link) {
+          window.location.href = link.href;
+        }
+      });
+
+      row.style.cursor = 'pointer';
+    });
   }
 
   // Call additional initialization functions
   initializeLazyLoading();
   optimizePDFLoading();
+
+  // Additional admin dashboard enhancements
+  function initializeAdvancedAdminFeatures() {
+    // Auto-refresh dashboard stats every 5 minutes
+    if (document.querySelector('.admin-dashboard-card')) {
+      setInterval(refreshDashboardStats, 300000);
+    }
+
+    // Keyboard shortcuts for admin actions
+    initializeAdminKeyboardShortcuts();
+
+    // Enhanced tooltips for admin interface
+    initializeAdvancedTooltips();
+  }
+
+  function refreshDashboardStats() {
+    const statsCards = document.querySelectorAll('.admin-dashboard-card h3');
+
+    // Add subtle loading animation
+    statsCards.forEach(card => {
+      card.style.opacity = '0.7';
+      card.style.transition = 'opacity 0.3s ease';
+
+      setTimeout(() => {
+        card.style.opacity = '1';
+      }, 500);
+    });
+
+    // In a real implementation, this would fetch new data via AJAX
+    console.log('Dashboard stats refreshed');
+  }
+
+  function initializeAdminKeyboardShortcuts() {
+    document.addEventListener('keydown', function (e) {
+      // Only activate on admin pages
+      if (!document.querySelector('.admin-dashboard-card')) return;
+
+      // Ctrl/Cmd + specific keys for admin shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'b':
+            e.preventDefault();
+            window.location.href = 'add-book.php';
+            break;
+          case 'c':
+            e.preventDefault();
+            window.location.href = 'add-category.php';
+            break;
+          case 'r':
+            e.preventDefault();
+            window.location.href = 'requests.php';
+            break;
+          case 'u':
+            e.preventDefault();
+            window.location.href = 'users.php';
+            break;
+        }
+      }
+    });
+  }
+
+  function initializeAdvancedTooltips() {
+    // Enhanced tooltips for admin dashboard
+    const tooltipElements = document.querySelectorAll('.admin-dashboard-card [title]');
+
+    tooltipElements.forEach(element => {
+      element.addEventListener('mouseenter', function () {
+        const tooltip = document.createElement('div');
+        tooltip.className = 'custom-tooltip';
+        tooltip.textContent = this.getAttribute('title');
+        tooltip.style.cssText = `
+          position: absolute;
+          background: rgba(0,0,0,0.8);
+          color: white;
+          padding: 0.5rem;
+          border-radius: 4px;
+          font-size: 0.8rem;
+          z-index: 1000;
+          pointer-events: none;
+          white-space: nowrap;
+        `;
+
+        document.body.appendChild(tooltip);
+
+        const rect = this.getBoundingClientRect();
+        tooltip.style.left = rect.left + 'px';
+        tooltip.style.top = (rect.bottom + 5) + 'px';
+
+        this._tooltip = tooltip;
+      });
+
+      element.addEventListener('mouseleave', function () {
+        if (this._tooltip) {
+          this._tooltip.remove();
+          this._tooltip = null;
+        }
+      });
+    });
+  }
+
+  // Initialize advanced admin features
+  initializeAdvancedAdminFeatures();
 });
 
 // Global functions for book detail page
@@ -1065,62 +1260,10 @@ if (!document.querySelector('#toast-animations')) {
     
     .animate-bounce {
       animation: bounce 1s ease-in-out;
-    }    `;
-  document.head.appendChild(style);
+    }    `; document.head.appendChild(style);
 }
-
-// Call additional initialization functions
-initializeLazyLoading();
-optimizePDFLoading();
 
 console.log('DUET PDF Library initialized successfully');
-
-// Lazy loading for book cover images
-function initializeLazyLoading() {
-  const bookCoverImages = document.querySelectorAll('.book-cover-image');
-
-  if ('IntersectionObserver' in window) {
-    const imageObserver = new IntersectionObserver((entries, observer) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const img = entry.target;
-          img.src = img.dataset.src || img.src;
-          img.classList.remove('lazy');
-          observer.unobserve(img);
-        }
-      });
-    });
-
-    bookCoverImages.forEach(img => {
-      if (img.dataset.src) {
-        imageObserver.observe(img);
-      }
-    });
-  }
-}
-
-// Performance optimization for PDF loading
-function optimizePDFLoading() {
-  const iframe = document.querySelector('.pdf-iframe');
-  if (!iframe) return;
-
-  // Add loading="lazy" attribute for better performance
-  iframe.setAttribute('loading', 'lazy');
-
-  // Preload PDF on hover (desktop only)
-  if (window.innerWidth > 768) {
-    const downloadBtns = document.querySelectorAll('[data-action="download"]');
-    downloadBtns.forEach(btn => {
-      btn.addEventListener('mouseenter', function () {
-        // Preload PDF in background
-        const link = document.createElement('link');
-        link.rel = 'prefetch';
-        link.href = iframe.src;
-        document.head.appendChild(link);
-      }, { once: true });
-    });
-  }
-}
 
 // Global category delete function (accessible from inline onclick handlers)
 function handleCategoryDelete(button) {
