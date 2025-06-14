@@ -1297,6 +1297,221 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+// Enhanced UI Animation Manager
+const AnimationManager = {
+  init() {
+    this.initCounterAnimations();
+    this.initScrollProgress();
+    this.initImageLoading();
+    this.initBookCardAnimations();
+    this.initSearchGlow();
+  },
+
+  initCounterAnimations() {
+    const counters = document.querySelectorAll('.counter');
+
+    const animateCounter = (counter) => {
+      const target = parseInt(counter.getAttribute('data-target'));
+      const duration = 2000;
+      const step = target / (duration / 16);
+      let current = 0;
+
+      const updateCounter = () => {
+        current += step;
+        if (current < target) {
+          counter.textContent = Math.floor(current);
+          requestAnimationFrame(updateCounter);
+        } else {
+          counter.textContent = target;
+        }
+      };
+
+      updateCounter();
+    };
+
+    // Intersection Observer for counter animation
+    const observerOptions = {
+      threshold: 0.5,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.classList.contains('animated')) {
+          entry.target.classList.add('animated');
+          animateCounter(entry.target);
+        }
+      });
+    }, observerOptions);
+
+    counters.forEach(counter => counterObserver.observe(counter));
+  },
+
+  initScrollProgress() {
+    // Create scroll progress bar
+    const progressBar = document.createElement('div');
+    progressBar.className = 'scroll-progress';
+    document.body.appendChild(progressBar);
+
+    // Update progress on scroll
+    window.addEventListener('scroll', () => {
+      const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrolled = (winScroll / height) * 100;
+      progressBar.style.width = scrolled + '%';
+    });
+  },
+
+  initImageLoading() {
+    const images = document.querySelectorAll('.book-image');
+
+    images.forEach(img => {
+      if (img.complete) {
+        img.classList.add('loaded');
+      } else {
+        img.addEventListener('load', () => {
+          img.classList.add('loaded');
+        });
+
+        img.addEventListener('error', () => {
+          img.classList.add('loaded'); // Still show the placeholder
+        });
+      }
+    });
+  },
+
+  initBookCardAnimations() {
+    const bookCards = document.querySelectorAll('.book-card-wrapper');
+
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const cardObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry, index) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+          }, index * 100);
+        }
+      });
+    }, observerOptions);
+
+    bookCards.forEach(card => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(30px)';
+      card.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+      cardObserver.observe(card);
+    });
+  },
+
+  initSearchGlow() {
+    const searchInputs = document.querySelectorAll('.search-form .form-control');
+
+    searchInputs.forEach(input => {
+      input.addEventListener('focus', () => {
+        input.closest('.input-group').classList.add('glow-active');
+      });
+
+      input.addEventListener('blur', () => {
+        input.closest('.input-group').classList.remove('glow-active');
+      });
+    });
+  }
+};
+
+// Enhanced Search Manager
+const SearchManager = {
+  ...SearchManager,
+
+  // Override the existing init method to add animations
+  init() {
+    this.initSearchInputs();
+    this.initAutoSearch();
+    this.initSearchSuggestions();
+    this.initSearchAnimations();
+  },
+
+  initSearchAnimations() {
+    const searchForm = document.querySelector('.search-form');
+    const categoryFilter = document.querySelector('.category-filter');
+
+    if (searchForm) {
+      const input = searchForm.querySelector('.form-control');
+      const button = searchForm.querySelector('.btn');
+
+      input?.addEventListener('focus', () => {
+        searchForm.classList.add('search-active');
+      });
+
+      input?.addEventListener('blur', () => {
+        searchForm.classList.remove('search-active');
+      });
+
+      // Animate button on form submit
+      searchForm.addEventListener('submit', (e) => {
+        button?.classList.add('loading');
+        setTimeout(() => {
+          button?.classList.remove('loading');
+        }, 1000);
+      });
+    }
+  }
+};
+
+// Enhanced Page Manager
+const PageManager = {
+  ...PageManager,
+
+  init() {
+    this.initializeBasics();
+    this.initializeAnimations();
+
+    // Initialize other managers
+    AnimationManager.init();
+
+    // Existing initialization code
+    if (this.isAdminDashboard()) {
+      AdminDashboard?.init();
+    }
+
+    if (this.isProfilePage()) {
+      ProfileManager?.init();
+    }
+
+    BookDetailManager?.init();
+    SearchManager?.init();
+    CategoryManager?.init();
+    this.initBootstrapComponents();
+    this.initFlashMessages();
+  },
+
+  initializeAnimations() {
+    // Add stagger animation to elements
+    const animatedElements = document.querySelectorAll('.book-card, .category-card, .stat-card');
+
+    animatedElements.forEach((element, index) => {
+      element.style.animationDelay = `${index * 0.1}s`;
+    });
+
+    // Add smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      });
+    });
+  }
+};
+
 // Global utility functions and event handlers
 window.toggleFullscreen = function () {
   const pdfContainer = document.querySelector('.pdf-viewer-container');
